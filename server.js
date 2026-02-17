@@ -1,0 +1,199 @@
+const express = require('express');
+const cors = require('cors');
+require('dotenv').config();
+
+const pool = require('./database/pool');
+const { fetchAndStore } = require('./lib/softpro-client');
+const reports = require('./lib/reports');
+
+const app = express();
+const PORT = process.env.PORT || 3001;
+
+// Middleware
+app.use(cors({
+  origin: process.env.FRONTEND_URL || '*',
+  credentials: true
+}));
+app.use(express.json());
+
+// ============================================
+// HEALTH CHECK
+// ============================================
+app.get('/api/health', async (req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    res.json({ status: 'ok', db: 'connected' });
+  } catch (err) {
+    res.status(500).json({ status: 'error', db: 'disconnected', error: err.message });
+  }
+});
+
+// ============================================
+// DATA FETCH ENDPOINTS
+// ============================================
+
+// Fetch a single month from SoftPro API and store in DB
+// POST /api/fetch/:yearMonth  (e.g., /api/fetch/2026-02)
+app.post('/api/fetch/:yearMonth', async (req, res) => {
+  const { yearMonth } = req.params;
+  
+  if (!/^\d{4}-\d{2}$/.test(yearMonth)) {
+    return res.status(400).json({ error: 'Invalid format. Use YYYY-MM' });
+  }
+  
+  try {
+    const meta = await fetchAndStore(yearMonth);
+    res.json({ success: true, ...meta });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get fetch history
+app.get('/api/fetch-log', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT * FROM fetch_log ORDER BY fetched_at DESC LIMIT 50'
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get available months (that have been fetched)
+app.get('/api/months', async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT fetch_month, COUNT(*) as order_count, SUM(total_revenue) as total_revenue
+      FROM order_summary
+      GROUP BY fetch_month
+      ORDER BY fetch_month DESC
+    `);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================
+// REPORT ENDPOINTS
+// ============================================
+
+// Report 1: Daily Revenue
+app.get('/api/reports/daily-revenue', async (req, res) => {
+  try {
+    const month = parseInt(req.query.month) || new Date().getMonth() + 1;
+    const year = parseInt(req.query.year) || new Date().getFullYear();
+    const data = await reports.dailyRevenue(month, year);
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Report 2: R-14 Branches
+app.get('/api/reports/r14-branches', async (req, res) => {
+  try {
+    const month = parseInt(req.query.month) || new Date().getMonth() + 1;
+    const year = parseInt(req.query.year) || new Date().getFullYear();
+    const data = await reports.r14Branches(month, year);
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Report 3: R-14 Ranking
+app.get('/api/reports/r14-ranking', async (req, res) => {
+  try {
+    const month = parseInt(req.query.month) || new Date().getMonth() + 1;
+    const year = parseInt(req.query.year) || new Date().getFullYear();
+    const data = await reports.r14Ranking(month, year);
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Report 4: Title Officer Production
+app.get('/api/reports/title-officer', async (req, res) => {
+  try {
+    const month = parseInt(req.query.month) || new Date().getMonth() + 1;
+    const year = parseInt(req.query.year) || new Date().getFullYear();
+    const data = await reports.titleOfficerProduction(month, year);
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Report 5: Escrow Production
+app.get('/api/reports/escrow-production', async (req, res) => {
+  try {
+    const month = parseInt(req.query.month) || new Date().getMonth() + 1;
+    const year = parseInt(req.query.year) || new Date().getFullYear();
+    const data = await reports.escrowProduction(month, year);
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================
+// DATA EXPLORER (for debugging/validation)
+// ============================================
+
+// Get raw line items for an order
+app.get('/api/orders/:fileNumber', async (req, res) => {
+  try {
+    const { rows: lineItems } = await pool.query(
+      'SELECT * FROM revenue_line_items WHERE file_number = $1 ORDER BY fetch_month, bill_code',
+      [req.params.fileNumber]
+    );
+    const { rows: summary } = await pool.query(
+      'SELECT * FROM order_summary WHERE file_number = $1 ORDER BY fetch_month',
+      [req.params.fileNumber]
+    );
+    res.json({ lineItems, summary });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get summary stats for a month
+app.get('/api/stats/:yearMonth', async (req, res) => {
+  try {
+    const { yearMonth } = req.params;
+    
+    const { rows: branchStats } = await pool.query(`
+      SELECT branch, category, COUNT(*) as count, SUM(total_revenue) as revenue
+      FROM order_summary WHERE fetch_month = $1
+      GROUP BY branch, category ORDER BY branch, category
+    `, [yearMonth]);
+    
+    const { rows: billCodeStats } = await pool.query(`
+      SELECT bill_code, COUNT(*) as count, SUM(sum_amount) as total
+      FROM revenue_line_items WHERE fetch_month = $1
+      GROUP BY bill_code ORDER BY bill_code
+    `, [yearMonth]);
+    
+    const { rows: repStats } = await pool.query(`
+      SELECT sales_rep, COUNT(*) as count, SUM(total_revenue) as revenue
+      FROM order_summary WHERE fetch_month = $1 AND transaction_date IS NOT NULL
+      GROUP BY sales_rep ORDER BY revenue DESC
+    `, [yearMonth]);
+    
+    res.json({ branchStats, billCodeStats, repStats });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================
+// START SERVER
+// ============================================
+app.listen(PORT, () => {
+  console.log(`Manager Reports API running on port ${PORT}`);
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+});
