@@ -10,6 +10,8 @@ import R14BranchesReport from '../components/R14BranchesReport';
 import R14RankingReport from '../components/R14RankingReport';
 import TitleOfficerReport from '../components/TitleOfficerReport';
 import EscrowProductionReport from '../components/EscrowProductionReport';
+import TSGProductionReport from '../components/TSGProductionReport';
+import DiscrepanciesReport from '../components/DiscrepanciesReport';
 import FetchManager from '../components/FetchManager';
 import TessaChat from '../components/TessaChat';
 import SettingsPage from '../components/SettingsPage';
@@ -20,6 +22,8 @@ const NAV_ITEMS = [
   { id: 'r14-ranking', label: 'R-14 Ranking', iconKey: 'ranking', endpoint: '/api/reports/r14-ranking', section: 'reports' },
   { id: 'title-officer', label: 'Title Officer', iconKey: 'title', endpoint: '/api/reports/title-officer', section: 'reports' },
   { id: 'escrow', label: 'Escrow Production', iconKey: 'escrow', endpoint: '/api/reports/escrow-production', section: 'reports' },
+  { id: 'tsg', label: 'TSG Production', iconKey: 'tsg', endpoint: '/api/reports/tsg-production', section: 'reports' },
+  { id: 'discrepancies', label: 'Discrepancies', iconKey: 'discrepancies', endpoint: null, section: 'reports' },
   { id: 'tessa', label: 'Ask Tessa', iconKey: 'tessa', endpoint: null, section: 'ai' },
   { id: 'data', label: 'Data Manager', iconKey: 'database', endpoint: null, section: 'admin' },
   { id: 'settings', label: 'Settings', iconKey: 'settings', endpoint: null, section: 'admin' },
@@ -36,6 +40,8 @@ function NavIcon({ name, active, tessa }) {
     ranking: <svg {...props}><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>,
     title: <svg {...props}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10 9 9 9 8 9" /></svg>,
     escrow: <svg {...props}><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2" /><rect x="8" y="2" width="8" height="4" rx="1" /><path d="M9 14l2 2 4-4" /></svg>,
+    tsg: <svg {...props}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>,
+    discrepancies: <svg {...props}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>,
     tessa: <svg {...props} strokeWidth={1.6}><circle cx="12" cy="12" r="3" /><path d="M12 2v2" /><path d="M12 20v2" /><path d="M4.93 4.93l1.41 1.41" /><path d="M17.66 17.66l1.41 1.41" /><path d="M2 12h2" /><path d="M20 12h2" /><path d="M4.93 19.07l1.41-1.41" /><path d="M17.66 6.34l1.41-1.41" /></svg>,
     database: <svg {...props}><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" /><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" /></svg>,
     settings: <svg {...props}><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" /></svg>,
@@ -216,6 +222,8 @@ export default function Home() {
             {activeTab === 'r14-ranking' && <R14RankingReport data={data} />}
             {activeTab === 'title-officer' && <TitleOfficerReport data={data} />}
             {activeTab === 'escrow' && <EscrowProductionReport data={data} />}
+            {activeTab === 'tsg' && <TSGProductionReport data={data} />}
+            {activeTab === 'discrepancies' && <DiscrepanciesReport month={month} year={year} />}
             {activeTab === 'tessa' && <TessaChat month={month} year={year} />}
             {activeTab === 'data' && <FetchManager />}
             {activeTab === 'settings' && <SettingsPage showKPI={showKPI} onToggleKPI={toggleKPI} />}

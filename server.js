@@ -140,6 +140,18 @@ app.get('/api/reports/escrow-production', async (req, res) => {
   }
 });
 
+// Report 6: TSG Production
+app.get('/api/reports/tsg-production', async (req, res) => {
+  try {
+    const month = parseInt(req.query.month) || new Date().getMonth() + 1;
+    const year = parseInt(req.query.year) || new Date().getFullYear();
+    const data = await reports.tsgProduction(month, year);
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ============================================
 // DATA EXPLORER (for debugging/validation)
 // ============================================
@@ -185,6 +197,22 @@ app.get('/api/stats/:yearMonth', async (req, res) => {
     `, [yearMonth]);
     
     res.json({ branchStats, billCodeStats, repStats });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================
+// DISCREPANCIES
+// ============================================
+const { runDiscrepancyChecks } = require('./lib/discrepancies');
+
+app.get('/api/reports/discrepancies', async (req, res) => {
+  const month = parseInt(req.query.month) || new Date().getMonth() + 1;
+  const year = parseInt(req.query.year) || new Date().getFullYear();
+  try {
+    const result = await runDiscrepancyChecks(month, year);
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
