@@ -4,6 +4,11 @@ import { formatCurrency, formatPercent } from '../lib/api';
 
 const CATEGORIES = ['Purchase', 'Refinance'];
 
+const CATEGORY_CLASSES = {
+  'Purchase': 'col-purchase',
+  'Refinance': 'col-refi',
+};
+
 export default function TitleOfficerReport({ data }) {
   if (!data || !data.report) return <p style={{ color: '#868e96', padding: '40px 0', textAlign: 'center' }}>No data available.</p>;
 
@@ -25,7 +30,9 @@ export default function TitleOfficerReport({ data }) {
             <tr>
               <th rowSpan={2} className="text-left">Title Officer</th>
               {CATEGORIES.map(cat => (
-                <th key={cat} colSpan={6} style={{ textAlign: 'center' }}>{cat}</th>
+                <th key={cat} colSpan={6} className={CATEGORY_CLASSES[cat]} style={{ textAlign: 'center' }}>
+                  {cat}
+                </th>
               ))}
               <th colSpan={3} style={{ textAlign: 'center' }}>Total Revenue</th>
               <th colSpan={3} className="col-ratio" style={{ textAlign: 'center' }}>Closing Ratio</th>
@@ -33,7 +40,12 @@ export default function TitleOfficerReport({ data }) {
             <tr>
               {CATEGORIES.map(cat => (
                 <Fragment key={cat}>
-                  <th>T.Cnt</th><th>T.Rev</th><th>M.Cnt</th><th>M.Rev</th><th>P.Cnt</th><th>P.Rev</th>
+                  <th className={CATEGORY_CLASSES[cat]}>T.Cnt</th>
+                  <th className={CATEGORY_CLASSES[cat]}>T.Rev</th>
+                  <th className={CATEGORY_CLASSES[cat]}>M.Cnt</th>
+                  <th className={CATEGORY_CLASSES[cat]}>M.Rev</th>
+                  <th className={CATEGORY_CLASSES[cat]}>P.Cnt</th>
+                  <th className={CATEGORY_CLASSES[cat]}>P.Rev</th>
                 </Fragment>
               ))}
               <th>Today</th><th>MTD</th><th>Prior</th>

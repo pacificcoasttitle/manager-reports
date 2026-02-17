@@ -2,7 +2,14 @@
 
 import { formatCurrency, formatPercent } from '../lib/api';
 
-const CATEGORIES = ['Purchase', 'Refinance', 'Escrow', 'TSG'];
+const CATEGORIES = ['Purchase', 'Refinance', 'Escrow'];
+
+const CATEGORY_CLASSES = {
+  'Purchase': 'col-purchase',
+  'Refinance': 'col-refi',
+  'Escrow': 'col-escrow',
+  'TSG': 'col-tsg'
+};
 
 export default function R14BranchesReport({ data }) {
   if (!data || !data.report) return <p style={{ color: '#868e96', padding: '40px 0', textAlign: 'center' }}>No data available.</p>;
@@ -24,14 +31,21 @@ export default function R14BranchesReport({ data }) {
             <tr>
               <th rowSpan={2} className="text-left">Sales Rep</th>
               {CATEGORIES.map(cat => (
-                <th key={cat} colSpan={6} style={{ textAlign: 'center' }}>{cat}</th>
+                <th key={cat} colSpan={6} className={CATEGORY_CLASSES[cat]} style={{ textAlign: 'center' }}>
+                  {cat}
+                </th>
               ))}
               <th colSpan={3} className="col-ratio" style={{ textAlign: 'center' }}>Closing Ratio</th>
             </tr>
             <tr>
               {CATEGORIES.map(cat => (
                 <Fragment key={cat}>
-                  <th>T.Cnt</th><th>T.Rev</th><th>M.Cnt</th><th>M.Rev</th><th>P.Cnt</th><th>P.Rev</th>
+                  <th className={CATEGORY_CLASSES[cat]}>T.Cnt</th>
+                  <th className={CATEGORY_CLASSES[cat]}>T.Rev</th>
+                  <th className={CATEGORY_CLASSES[cat]}>M.Cnt</th>
+                  <th className={CATEGORY_CLASSES[cat]}>M.Rev</th>
+                  <th className={CATEGORY_CLASSES[cat]}>P.Cnt</th>
+                  <th className={CATEGORY_CLASSES[cat]}>P.Rev</th>
                 </Fragment>
               ))}
               <th className="col-ratio">Open</th><th className="col-ratio">Close</th><th className="col-ratio">Ratio</th>
@@ -54,7 +68,7 @@ function BranchSection({ branch, reps }) {
   const repNames = Object.keys(reps).sort();
   return (
     <>
-      <tr className="branch-header"><td colSpan={28}>{branch}</td></tr>
+      <tr className="branch-header"><td colSpan={22}>{branch}</td></tr>
       {repNames.map(rep => {
         const e = reps[rep];
         return (

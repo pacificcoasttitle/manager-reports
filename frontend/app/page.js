@@ -172,7 +172,7 @@ export default function Home() {
 
         {/* KPI Cards */}
         {isReportTab && showKPI && data && !loading && (
-          <KPICards data={data} dates={dates} />
+          <KPICards data={data} dates={dates} activeTab={activeTab} />
         )}
 
         {/* Content */}
@@ -202,21 +202,48 @@ export default function Home() {
   );
 }
 
-function KPICards({ data, dates }) {
+function KPICards({ data, dates, activeTab }) {
   let totalRevMTD = 0;
   let totalOrdersMTD = 0;
   let totalRevPrior = 0;
   let projectedRev = 0;
 
   if (data?.grandTotal) {
+    // Daily Revenue has grandTotal
     totalRevMTD = data.grandTotal.mtd_rev || 0;
     totalOrdersMTD = data.grandTotal.mtd_closed || 0;
     totalRevPrior = data.grandTotal.prior_rev || 0;
   } else if (data?.ranking) {
-    totalRevMTD = data.ranking.reduce((s, r) => s + r.mtd_rev, 0);
-    totalOrdersMTD = data.ranking.reduce((s, r) => s + r.mtd_cnt, 0);
-    totalRevPrior = data.ranking.reduce((s, r) => s + r.prior_rev, 0);
-    projectedRev = data.ranking.reduce((s, r) => s + r.projected_rev, 0);
+    // R-14 Ranking has ranking array
+    totalRevMTD = data.ranking.reduce((s, r) => s + (r.mtd_rev || 0), 0);
+    totalOrdersMTD = data.ranking.reduce((s, r) => s + (r.mtd_cnt || 0), 0);
+    totalRevPrior = data.ranking.reduce((s, r) => s + (r.prior_rev || 0), 0);
+    projectedRev = data.ranking.reduce((s, r) => s + (r.projected_rev || 0), 0);
+  } else if (data?.report && typeof data.report === 'object') {
+    // R-14 Branches, Title Officer, Escrow — nested branch → person objects
+    Object.values(data.report).forEach(branch => {
+      Object.values(branch).forEach(person => {
+        if (person && typeof person === 'object') {
+          const cats = ['Purchase', 'Refinance', 'Escrow', 'TSG'];
+          let hasCats = cats.some(c => person[c]);
+
+          if (hasCats) {
+            cats.forEach(cat => {
+              if (person[cat]) {
+                totalRevMTD += person[cat].mtd_rev || 0;
+                totalOrdersMTD += person[cat].mtd_cnt || 0;
+                totalRevPrior += person[cat].prior_rev || 0;
+              }
+            });
+          } else {
+            // Escrow report — flat per person (today_cnt, mtd_cnt, etc.)
+            totalRevMTD += person.mtd_rev || 0;
+            totalOrdersMTD += person.mtd_cnt || 0;
+            totalRevPrior += person.prior_rev || 0;
+          }
+        }
+      });
+    });
   }
 
   if (dates && dates.workedDays > 0 && !projectedRev) {

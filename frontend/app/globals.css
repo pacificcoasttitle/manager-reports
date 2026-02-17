@@ -74,18 +74,28 @@
 
   .report-table-wrapper { background: var(--pct-white); border: 1px solid var(--pct-gray-200); border-radius: 8px; overflow: hidden; }
   .report-table { width: 100%; font-size: 12px; border-collapse: collapse; }
-  .report-table th { background-color: var(--pct-navy); color: var(--pct-white); padding: 8px 10px; text-align: right; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; border: 1px solid var(--pct-navy-light); white-space: nowrap; }
+  .report-table th { background-color: #e9ecef; color: #343a40; padding: 8px 10px; text-align: right; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; border: 1px solid #dee2e6; white-space: nowrap; }
   .report-table th.text-left { text-align: left; }
-  .report-table th.col-open { background-color: #1a5c2e; }
-  .report-table th.col-closed { background-color: var(--pct-navy); }
-  .report-table th.col-revenue { background-color: #5b2d8e; }
-  .report-table th.col-ratio { background-color: #8a6d00; }
-  .report-table td { padding: 6px 10px; border: 1px solid var(--pct-gray-100); text-align: right; font-variant-numeric: tabular-nums; color: var(--pct-gray-800); }
+
+  /* Category column groups — soft pastels */
+  .report-table th.col-purchase { background-color: #dbeafe; color: #1e40af; }
+  .report-table th.col-refi { background-color: #fef3c7; color: #92400e; }
+  .report-table th.col-escrow { background-color: #d1fae5; color: #065f46; }
+  .report-table th.col-tsg { background-color: #fce7f3; color: #9d174d; }
+
+  /* Open/Closed/Revenue groups for Daily Revenue */
+  .report-table th.col-open { background-color: #d1fae5; color: #065f46; }
+  .report-table th.col-closed { background-color: #dbeafe; color: #1e40af; }
+  .report-table th.col-revenue { background-color: #ede9fe; color: #5b21b6; }
+  .report-table th.col-ratio { background-color: #fef3c7; color: #92400e; }
+
+  .report-table td { padding: 6px 10px; border: 1px solid #f1f3f5; text-align: right; font-variant-numeric: tabular-nums; color: #495057; }
   .report-table td.text-left { text-align: left; }
-  .report-table tbody tr:hover { background-color: rgba(3,55,79,0.03); }
-  .report-table .branch-header td { background-color: var(--pct-navy); color: var(--pct-white); font-weight: 700; font-size: 12px; text-align: left; border-color: var(--pct-navy-light); }
-  .report-table .subtotal-row td { background-color: var(--pct-gray-100); font-weight: 600; color: var(--pct-gray-800); }
-  .report-table .grand-total-row td { background-color: var(--pct-navy-dark); color: var(--pct-white); font-weight: 700; border-color: var(--pct-navy); }
+  .report-table tbody tr:hover { background-color: rgba(3, 55, 79, 0.02); }
+
+  .report-table .branch-header td { background-color: #03374f; color: #ffffff; font-weight: 700; font-size: 12px; text-align: left; border-color: #064a6b; }
+  .report-table .subtotal-row td { background-color: #f1f3f5; font-weight: 600; color: #343a40; }
+  .report-table .grand-total-row td { background-color: #343a40; color: #ffffff; font-weight: 700; border-color: #495057; }
   .report-table .projected-col { color: var(--pct-accent); font-weight: 600; }
 
   .month-selector select { background: var(--pct-white); border: 1px solid var(--pct-gray-300); border-radius: 6px; padding: 6px 10px; font-size: 13px; color: var(--pct-gray-800); cursor: pointer; outline: none; }

@@ -22,9 +22,9 @@ export default function EscrowProductionReport({ data }) {
           <thead>
             <tr>
               <th className="text-left">Sales Rep</th>
-              <th>Today Cnt</th><th>Today Rev</th>
-              <th>MTD Cnt</th><th>MTD Rev</th>
-              <th>Prior Cnt</th><th>Prior Rev</th>
+              <th className="col-escrow">Today Cnt</th><th className="col-escrow">Today Rev</th>
+              <th className="col-escrow">MTD Cnt</th><th className="col-escrow">MTD Rev</th>
+              <th className="col-escrow">Prior Cnt</th><th className="col-escrow">Prior Rev</th>
               <th className="col-ratio">Open (4m)</th><th className="col-ratio">Close (4m)</th><th className="col-ratio">Ratio</th>
             </tr>
           </thead>
