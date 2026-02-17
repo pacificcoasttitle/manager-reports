@@ -11,15 +11,15 @@ export default function DailyRevenueReport({ data }) {
   const { report, grandTotal, dates } = data;
 
   return (
-    <div>
+    <div style={{ width: '100%' }}>
       <div className="report-meta">
         <span><span className="label">Period:</span> {dates.selectedMonthLabel}</span>
         <span><span className="label">Today =</span> {dates.yesterday}</span>
         <span><span className="label">Prior:</span> {dates.priorMonthLabel}</span>
       </div>
 
-      <div className="report-table-wrapper" style={{ overflowX: 'auto' }}>
-        <table className="report-table">
+      <div className="report-table-wrapper" style={{ overflowX: 'auto', width: '100%' }}>
+        <table className="report-table" style={{ width: '100%', minWidth: '900px' }}>
           <thead>
             <tr>
               <th rowSpan={2} className="text-left" style={{ minWidth: '120px' }}>Branch / Type</th>
