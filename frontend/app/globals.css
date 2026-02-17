@@ -19,7 +19,7 @@
     @apply px-3 py-1.5 border border-gray-200 text-right tabular-nums;
   }
   .report-table td.text-left {
-    @apply text-left;
+    text-align: left;
   }
   .report-table tr:nth-child(even) {
     @apply bg-gray-50;
