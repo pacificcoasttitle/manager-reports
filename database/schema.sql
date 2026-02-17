@@ -8,34 +8,31 @@ CREATE TABLE IF NOT EXISTS revenue_line_items (
     file_number VARCHAR(50) NOT NULL,          -- [Number] e.g. "20006993-OCT"
     transaction_date DATE,                      -- [TransactionDate]
     bill_code VARCHAR(20) NOT NULL,            -- [BillCode] e.g. TPC, TPW, ESC, TSGW, UPRE
-    bill_code_category VARCHAR(100),           -- [BillCodeCategory]
-    charge_description VARCHAR(255),           -- [ChargeDescription]
+    bill_code_category TEXT,                   -- [BillCodeCategory]
+    charge_description TEXT,                   -- [ChargeDescription]
     sum_amount DECIMAL(12,2) NOT NULL DEFAULT 0, -- [SumAmount]
-    sales_rep VARCHAR(150),                    -- [SalesRep]
-    title_officer VARCHAR(150),                -- [TitleOfficerName]
-    escrow_officer VARCHAR(150),               -- [EscrowOfficerName]
-    order_type VARCHAR(100),                   -- [OrderType] "Title only", "Title & Escrow", "Trustee Sale Guarantee"
+    sales_rep TEXT,                             -- [SalesRep]
+    title_officer TEXT,                         -- [TitleOfficerName]
+    escrow_officer TEXT,                        -- [EscrowOfficerName]
+    order_type TEXT,                            -- [OrderType] "Title only", "Title & Escrow", "Trustee Sale Guarantee"
     trans_type VARCHAR(50),                    -- [TransType] "Purchase", "Refinance", "Other"
-    title_office VARCHAR(100),                 -- [TitleOffice]
-    escrow_office VARCHAR(100),                -- [EscrowOffice]
-    property_type VARCHAR(100),                -- [PropertyType]
-    county VARCHAR(100),                       -- [County]
-    city VARCHAR(100),                         -- [City]
+    title_office TEXT,                          -- [TitleOffice]
+    escrow_office TEXT,                         -- [EscrowOffice]
+    property_type TEXT,                         -- [PropertyType]
+    county TEXT,                                -- [County]
+    city TEXT,                                  -- [City]
     state VARCHAR(10),                         -- [PropState]
     zip VARCHAR(20),                           -- [Zip]
-    address VARCHAR(255),                      -- [Address1]
-    full_address VARCHAR(500),                 -- [FullAddress]
-    marketing_source VARCHAR(150),             -- [MarketingSource]
-    main_contact VARCHAR(150),                 -- [MainContact]
-    underwriter VARCHAR(150),                  -- [Underwriter]
+    address TEXT,                               -- [Address1]
+    full_address TEXT,                          -- [FullAddress]
+    marketing_source TEXT,                      -- [MarketingSource]
+    main_contact TEXT,                          -- [MainContact]
+    underwriter TEXT,                           -- [Underwriter]
     disbursement_date DATE,                    -- [DisbursementDate]
     escrow_closed_date DATE,                   -- [EscrowClosedDate]
     received_date DATE,                        -- [ReceivedDate]
     fetch_month VARCHAR(7) NOT NULL,           -- YYYY-MM of the API call that fetched this
-    created_at TIMESTAMP DEFAULT NOW(),
-    
-    -- Prevent duplicate imports
-    UNIQUE(file_number, bill_code, charge_description, sum_amount, fetch_month)
+    created_at TIMESTAMP DEFAULT NOW()
 );
 
 -- Aggregated order-level summary (one row per unique file number per month)
@@ -43,12 +40,12 @@ CREATE TABLE IF NOT EXISTS order_summary (
     id SERIAL PRIMARY KEY,
     file_number VARCHAR(50) NOT NULL,
     branch VARCHAR(30) NOT NULL,               -- Glendale, Orange, Inland Empire, Porterville, TSG, Unknown
-    order_type VARCHAR(100),                   -- Title only, Title & Escrow, Trustee Sale Guarantee
+    order_type TEXT,                            -- Title only, Title & Escrow, Trustee Sale Guarantee
     trans_type VARCHAR(50),                    -- Purchase, Refinance, Other
     category VARCHAR(30) NOT NULL,             -- Purchase, Refinance, Escrow, TSG
-    sales_rep VARCHAR(150),
-    title_officer VARCHAR(150),
-    escrow_officer VARCHAR(150),
+    sales_rep TEXT,
+    title_officer TEXT,
+    escrow_officer TEXT,
     
     -- Revenue by bill code type
     title_revenue DECIMAL(12,2) DEFAULT 0,     -- TPC + TPW
