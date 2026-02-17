@@ -353,13 +353,7 @@ app.put('/api/settings/app', async (req, res) => {
 // ============================================
 // START SERVER
 // ============================================
-// Only listen when running locally (not on Vercel)
-if (!process.env.VERCEL) {
-  app.listen(PORT, () => {
-    console.log(`Manager Reports API running on port ${PORT}`);
-    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-  });
-}
-
-// Export for Vercel serverless
-module.exports = app;
+app.listen(PORT, () => {
+  console.log(`Manager Reports API running on port ${PORT}`);
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+});
