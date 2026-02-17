@@ -193,7 +193,13 @@ app.get('/api/stats/:yearMonth', async (req, res) => {
 // ============================================
 // START SERVER
 // ============================================
-app.listen(PORT, () => {
-  console.log(`Manager Reports API running on port ${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-});
+// Only listen when running locally (not on Vercel)
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`Manager Reports API running on port ${PORT}`);
+    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  });
+}
+
+// Export for Vercel serverless
+module.exports = app;

@@ -1,0 +1,49 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply antialiased;
+  }
+}
+
+@layer components {
+  .report-table {
+    @apply w-full text-sm border-collapse;
+  }
+  .report-table th {
+    @apply bg-gray-700 text-white px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider border border-gray-600;
+  }
+  .report-table td {
+    @apply px-3 py-1.5 border border-gray-200 text-right tabular-nums;
+  }
+  .report-table td.text-left {
+    @apply text-left;
+  }
+  .report-table tr:nth-child(even) {
+    @apply bg-gray-50;
+  }
+  .report-table tr:hover {
+    @apply bg-blue-50;
+  }
+  .report-table .branch-header {
+    @apply bg-blue-800 text-white font-bold text-left;
+  }
+  .report-table .subtotal-row {
+    @apply bg-gray-200 font-semibold;
+  }
+  .report-table .grand-total-row {
+    @apply bg-gray-800 text-white font-bold;
+  }
+
+  .tab-btn {
+    @apply px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors;
+  }
+  .tab-btn.active {
+    @apply text-blue-700 border-blue-700 bg-white;
+  }
+  .tab-btn:not(.active) {
+    @apply text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300;
+  }
+}
