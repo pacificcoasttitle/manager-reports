@@ -34,6 +34,17 @@ function categorizeOrder(orderType, transType) {
 
 function parseDate(val) {
   if (!val) return null;
+  // Handle Excel serial date numbers (days since 1900-01-01, with Excel's leap year bug)
+  if (typeof val === 'number') {
+    // Excel epoch is Jan 1, 1900 but has a bug treating 1900 as leap year
+    // JS Date epoch is Jan 1, 1970. Excel serial 1 = Jan 1, 1900.
+    // Subtract 25569 to convert Excel serial to Unix days, then multiply by 86400000 for ms
+    const excelEpoch = new Date(Date.UTC(1899, 11, 30)); // Dec 30, 1899
+    const d = new Date(excelEpoch.getTime() + val * 86400000);
+    if (isNaN(d.getTime())) return null;
+    return d.toISOString().split('T')[0];
+  }
+  // Handle string dates
   const d = new Date(val);
   if (isNaN(d.getTime())) return null;
   return d.toISOString().split('T')[0];
