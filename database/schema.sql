@@ -69,6 +69,29 @@ CREATE TABLE IF NOT EXISTS order_summary (
     UNIQUE(file_number, fetch_month)
 );
 
+-- Open orders from SoftPro Excel exports (orders opened but not necessarily closed)
+CREATE TABLE IF NOT EXISTS open_orders (
+    id SERIAL PRIMARY KEY,
+    file_number VARCHAR(50) NOT NULL,
+    received_date DATE,
+    settlement_date DATE,
+    trans_type VARCHAR(50),
+    order_type TEXT,
+    product_type TEXT,
+    profile TEXT,
+    branch VARCHAR(30) NOT NULL,
+    category VARCHAR(30),
+    sales_rep TEXT,
+    title_officer TEXT,
+    escrow_officer TEXT,
+    escrow_assistant TEXT,
+    marketing_source TEXT,
+    main_contact TEXT,
+    open_month VARCHAR(7) NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(file_number, open_month)
+);
+
 -- Track which months have been fetched
 CREATE TABLE IF NOT EXISTS fetch_log (
     id SERIAL PRIMARY KEY,
@@ -93,3 +116,11 @@ CREATE INDEX IF NOT EXISTS idx_order_summary_received_date ON order_summary(rece
 CREATE INDEX IF NOT EXISTS idx_revenue_line_items_file_number ON revenue_line_items(file_number);
 CREATE INDEX IF NOT EXISTS idx_revenue_line_items_fetch_month ON revenue_line_items(fetch_month);
 CREATE INDEX IF NOT EXISTS idx_revenue_line_items_bill_code ON revenue_line_items(bill_code);
+
+-- Open orders indexes
+CREATE INDEX IF NOT EXISTS idx_open_orders_branch ON open_orders(branch);
+CREATE INDEX IF NOT EXISTS idx_open_orders_sales_rep ON open_orders(sales_rep);
+CREATE INDEX IF NOT EXISTS idx_open_orders_title_officer ON open_orders(title_officer);
+CREATE INDEX IF NOT EXISTS idx_open_orders_open_month ON open_orders(open_month);
+CREATE INDEX IF NOT EXISTS idx_open_orders_received_date ON open_orders(received_date);
+CREATE INDEX IF NOT EXISTS idx_open_orders_category ON open_orders(category);
