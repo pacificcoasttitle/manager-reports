@@ -92,6 +92,23 @@ CREATE TABLE IF NOT EXISTS open_orders (
     UNIQUE(file_number, open_month)
 );
 
+-- Title officer → home branch mapping (for Title Officer Production report)
+CREATE TABLE IF NOT EXISTS title_officer_branches (
+    id SERIAL PRIMARY KEY,
+    officer_name VARCHAR(150) NOT NULL UNIQUE,
+    branch VARCHAR(30) NOT NULL,
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+INSERT INTO title_officer_branches (officer_name, branch) VALUES
+  ('Jim Jean', 'Orange'),
+  ('Clive Virata', 'Orange'),
+  ('Eddie Las Marias', 'Glendale'),
+  ('Rachel Barcena', 'Glendale'),
+  ('Susan Dana', 'TSG')
+ON CONFLICT (officer_name) DO NOTHING;
+
 -- Track which months have been fetched
 CREATE TABLE IF NOT EXISTS fetch_log (
     id SERIAL PRIMARY KEY,

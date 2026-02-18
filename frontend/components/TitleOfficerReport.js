@@ -21,7 +21,7 @@ export default function TitleOfficerReport({ data }) {
         <span><span className="label">Period:</span> {dates.selectedMonthLabel}</span>
         <span><span className="label">Today =</span> {dates.yesterday}</span>
         <span><span className="label">Prior:</span> {dates.priorMonthLabel}</span>
-        <span style={{ color: '#f26b2b', fontWeight: 600 }}>Purchase & Refinance only</span>
+        <span style={{ color: '#f26b2b', fontWeight: 600 }}>Purchase & Refinance · Title Revenue Only</span>
       </div>
 
       <div className="report-table-wrapper" style={{ overflowX: 'auto' }}>
