@@ -3,12 +3,18 @@
 import { formatCurrency } from '../lib/api';
 
 const CATEGORIES = ['Purchase', 'Refinance', 'TSG'];
-const BRANCHES = ['Glendale', 'Orange', 'Inland Empire', 'Porterville', 'TSG'];
 
 export default function DailyRevenueReport({ data }) {
   if (!data || !data.report) return <p style={{ color: '#868e96', padding: '40px 0', textAlign: 'center' }}>No data available. Fetch this month first in Data Manager.</p>;
 
   const { report, grandTotal, dates } = data;
+  
+  // Branches come dynamically from the API (sorted, Unassigned last)
+  const branches = Object.keys(report).sort((a, b) => {
+    if (a === 'Unassigned') return 1;
+    if (b === 'Unassigned') return -1;
+    return a.localeCompare(b);
+  });
 
   return (
     <div style={{ width: '100%' }}>
@@ -34,7 +40,7 @@ export default function DailyRevenueReport({ data }) {
             </tr>
           </thead>
           <tbody>
-            {BRANCHES.map(branch => {
+            {branches.map(branch => {
               const bd = report[branch];
               if (!bd) return null;
               return <BranchSection key={branch} branch={branch} data={bd} />;
