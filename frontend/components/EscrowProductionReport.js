@@ -41,13 +41,20 @@ export default function EscrowProductionReport({ data }) {
 
 function BranchSection({ branch, reps }) {
   const repNames = Object.keys(reps).sort();
+  let totalCreated = 0, totalClosed = 0;
   const sub = repNames.reduce((a, n) => {
     const r = reps[n];
     a.today_cnt += r.today_cnt; a.today_rev += r.today_rev;
     a.mtd_cnt += r.mtd_cnt; a.mtd_rev += r.mtd_rev;
     a.prior_cnt += r.prior_cnt; a.prior_rev += r.prior_rev;
+    totalCreated += r.created_4m || 0;
+    totalClosed += r.closed_4m || 0;
     return a;
   }, { today_cnt: 0, today_rev: 0, mtd_cnt: 0, mtd_rev: 0, prior_cnt: 0, prior_rev: 0 });
+
+  const branchRatio = totalCreated > 0
+    ? (totalClosed / totalCreated * 100).toFixed(1) + '%'
+    : '—';
 
   return (
     <>
@@ -70,14 +77,16 @@ function BranchSection({ branch, reps }) {
         );
       })}
       <tr className="subtotal-row">
-        <td className="text-left">{branch} Subtotal</td>
+        <td className="text-left" style={{ paddingLeft: '16px' }}>{branch} Total</td>
         <td>{sub.today_cnt || ''}</td>
         <td>{sub.today_rev ? formatCurrency(sub.today_rev) : ''}</td>
         <td>{sub.mtd_cnt || ''}</td>
         <td>{sub.mtd_rev ? formatCurrency(sub.mtd_rev) : ''}</td>
         <td>{sub.prior_cnt || ''}</td>
         <td>{sub.prior_rev ? formatCurrency(sub.prior_rev) : ''}</td>
-        <td></td><td></td><td></td>
+        <td>{totalCreated || ''}</td>
+        <td>{totalClosed || ''}</td>
+        <td>{branchRatio}</td>
       </tr>
     </>
   );

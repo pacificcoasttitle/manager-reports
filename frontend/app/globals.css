@@ -96,7 +96,7 @@
   .report-table tbody tr:hover { background-color: rgba(3, 55, 79, 0.02); }
 
   .report-table .branch-header td { background-color: #03374f; color: #ffffff; font-weight: 700; font-size: 12px; text-align: left; border-color: #064a6b; }
-  .report-table .subtotal-row td { background-color: #f1f3f5; font-weight: 600; color: #343a40; }
+  .report-table .subtotal-row td { background-color: #f1f3f5; font-weight: 600; color: #343a40; border-top: 2px solid #dee2e6; }
   .report-table .grand-total-row td { background-color: #343a40; color: #ffffff; font-weight: 700; border-color: #495057; }
   .report-table .projected-col { color: var(--pct-accent); font-weight: 600; }
 

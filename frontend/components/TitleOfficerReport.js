@@ -67,6 +67,35 @@ function Fragment({ children }) { return <>{children}</>; }
 
 function BranchSection({ branch, officers }) {
   const names = Object.keys(officers).sort();
+
+  // Compute branch subtotals
+  const branchTotal = {};
+  let totalToday = 0, totalMTD = 0, totalPrior = 0;
+  let branchTotalCreated = 0, branchTotalClosed = 0;
+  names.forEach(name => {
+    const e = officers[name];
+    CATEGORIES.forEach(cat => {
+      if (!branchTotal[cat]) branchTotal[cat] = { today_cnt: 0, today_rev: 0, mtd_cnt: 0, mtd_rev: 0, prior_cnt: 0, prior_rev: 0 };
+      if (e[cat]) {
+        branchTotal[cat].today_cnt += e[cat].today_cnt || 0;
+        branchTotal[cat].today_rev += e[cat].today_rev || 0;
+        branchTotal[cat].mtd_cnt += e[cat].mtd_cnt || 0;
+        branchTotal[cat].mtd_rev += e[cat].mtd_rev || 0;
+        branchTotal[cat].prior_cnt += e[cat].prior_cnt || 0;
+        branchTotal[cat].prior_rev += e[cat].prior_rev || 0;
+      }
+    });
+    totalToday += e.totals?.today_rev || 0;
+    totalMTD += e.totals?.mtd_rev || 0;
+    totalPrior += e.totals?.prior_rev || 0;
+    branchTotalCreated += e.created_4m || 0;
+    branchTotalClosed += e.closed_4m || 0;
+  });
+
+  const branchRatio = branchTotalCreated > 0
+    ? (branchTotalClosed / branchTotalCreated * 100).toFixed(1) + '%'
+    : '—';
+
   return (
     <>
       <tr className="branch-header"><td colSpan={18}>{branch}</td></tr>
@@ -97,6 +126,28 @@ function BranchSection({ branch, officers }) {
           </tr>
         );
       })}
+      <tr className="subtotal-row">
+        <td className="text-left" style={{ paddingLeft: '16px' }}>{branch} Total</td>
+        {CATEGORIES.map(cat => {
+          const t = branchTotal[cat] || {};
+          return (
+            <Fragment key={cat}>
+              <td>{t.today_cnt || ''}</td>
+              <td>{t.today_rev ? formatCurrency(t.today_rev) : ''}</td>
+              <td>{t.mtd_cnt || ''}</td>
+              <td>{t.mtd_rev ? formatCurrency(t.mtd_rev) : ''}</td>
+              <td>{t.prior_cnt || ''}</td>
+              <td>{t.prior_rev ? formatCurrency(t.prior_rev) : ''}</td>
+            </Fragment>
+          );
+        })}
+        <td>{totalToday ? formatCurrency(totalToday) : ''}</td>
+        <td>{totalMTD ? formatCurrency(totalMTD) : ''}</td>
+        <td>{totalPrior ? formatCurrency(totalPrior) : ''}</td>
+        <td>{branchTotalCreated || ''}</td>
+        <td>{branchTotalClosed || ''}</td>
+        <td>{branchRatio}</td>
+      </tr>
     </>
   );
 }
