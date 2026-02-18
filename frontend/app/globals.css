@@ -74,8 +74,11 @@
   .report-meta { font-size: 12px; color: var(--pct-gray-600); padding: 8px 0 12px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
   .report-meta .label { font-weight: 600; color: var(--pct-gray-700); }
 
-  .report-table-wrapper { background: var(--pct-white); border: 1px solid var(--pct-gray-200); border-radius: 8px; overflow: hidden; }
+  .report-table-wrapper { background: var(--pct-white); border: 1px solid var(--pct-gray-200); border-radius: 8px; max-height: calc(100vh - 250px); overflow-y: auto; overflow-x: auto; position: relative; }
   .report-table { width: 100%; font-size: 12px; border-collapse: collapse; }
+  .report-table thead th { position: sticky; top: 0; z-index: 10; box-shadow: 0 1px 0 #dee2e6; }
+  .report-table thead tr:first-child th { position: sticky; top: 0; z-index: 11; }
+  .report-table thead tr:nth-child(2) th { position: sticky; top: 29px; z-index: 10; }
   .report-table th { background-color: #e9ecef; color: #343a40; padding: 8px 10px; text-align: right; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; border: 1px solid #dee2e6; white-space: nowrap; }
   .report-table th.text-left { text-align: left; }
 
