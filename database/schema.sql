@@ -104,7 +104,7 @@ CREATE TABLE IF NOT EXISTS title_officer_branches (
 INSERT INTO title_officer_branches (officer_name, branch) VALUES
   ('Jim Jean', 'Orange'),
   ('Clive Virata', 'Orange'),
-  ('Eddie Las Marias', 'Glendale'),
+  ('Eddie LasMarias', 'Glendale'),
   ('Rachel Barcena', 'Glendale'),
   ('Susan Dana', 'TSG')
 ON CONFLICT (officer_name) DO NOTHING;
