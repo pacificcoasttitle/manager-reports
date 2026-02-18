@@ -2,7 +2,7 @@
 
 import { formatCurrency } from '../lib/api';
 
-const CATEGORIES = ['Purchase', 'Refinance', 'Escrow', 'TSG'];
+const CATEGORIES = ['Purchase', 'Refinance', 'TSG'];
 const BRANCHES = ['Glendale', 'Orange', 'Inland Empire', 'Porterville', 'TSG'];
 
 export default function DailyRevenueReport({ data }) {
