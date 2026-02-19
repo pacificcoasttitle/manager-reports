@@ -153,6 +153,35 @@ app.get('/api/reports/tsg-production', async (req, res) => {
 });
 
 // ============================================
+// DEBUG: Open Orders API sample (temporary — remove after field mapping confirmed)
+// ============================================
+app.get('/api/debug/open-orders-sample', async (req, res) => {
+  try {
+    const date = req.query.date || '2026-02-01';
+    const API_BASE = process.env.SOFTPRO_API_BASE || 'http://100.29.181.61:3000/api';
+    const url = `${API_BASE}/powerbi/getOpeningData?userPostedDate=${date}`;
+    console.log(`Debug: Fetching open orders sample from ${url}`);
+    
+    const axios = require('axios');
+    const response = await axios.get(url, {
+      timeout: 120000,
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const result = response.data;
+    
+    res.json({
+      totalRecords: result.data?.length || 0,
+      sampleRecords: (result.data || []).slice(0, 3),
+      allFields: result.data?.[0] ? Object.keys(result.data[0]) : [],
+      status: result.Status,
+      message: result.Message
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================
 // DATA EXPLORER (for debugging/validation)
 // ============================================
 
