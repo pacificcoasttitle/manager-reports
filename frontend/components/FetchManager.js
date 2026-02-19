@@ -12,16 +12,12 @@ export default function FetchManager() {
 
   // Open orders state
   const [openOrdersMonths, setOpenOrdersMonths] = useState([]);
-  const [openYearMonth, setOpenYearMonth] = useState('');
-  const [openLoading, setOpenLoading] = useState(false);
-  const [openResult, setOpenResult] = useState(null);
 
   useEffect(() => {
     loadData();
     const now = new Date();
     const currentYM = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     setYearMonth(currentYM);
-    setOpenYearMonth(currentYM);
   }, []);
 
   async function loadData() {
@@ -48,36 +44,6 @@ export default function FetchManager() {
     } catch (err) {
       setResult({ success: false, error: err.message });
     } finally { setLoading(false); }
-  }
-
-  async function handleOpenOrdersFetch(date) {
-    if (openLoading) return;
-    setOpenLoading(true);
-    setOpenResult(null);
-    try {
-      const res = await api('/api/import/open-orders', {
-        method: 'POST',
-        body: JSON.stringify({ date }),
-        headers: { 'Content-Type': 'application/json' }
-      });
-      setOpenResult({ success: true, ...res });
-      loadData();
-    } catch (err) {
-      setOpenResult({ success: false, error: err.message });
-    } finally { setOpenLoading(false); }
-  }
-
-  async function handleOpenOrdersToday() {
-    if (openLoading) return;
-    setOpenLoading(true);
-    setOpenResult(null);
-    try {
-      const res = await api('/api/import/open-orders-today', { method: 'POST' });
-      setOpenResult({ success: true, ...res });
-      loadData();
-    } catch (err) {
-      setOpenResult({ success: false, error: err.message });
-    } finally { setOpenLoading(false); }
   }
 
   return (
@@ -107,44 +73,18 @@ export default function FetchManager() {
         )}
       </div>
 
-      {/* Open Orders Import */}
+      {/* Open Orders Info */}
       <div className="fetch-card">
-        <h3>Import Open Orders from SoftPro</h3>
-        <p style={{ fontSize: '12px', color: '#868e96', margin: '0 0 10px 0' }}>
-          Fetches open/received orders from SoftPro API. Deduplicates line items into unique orders.
+        <h3>Open Orders (Excel Import)</h3>
+        <p style={{ fontSize: '12px', color: '#868e96', margin: '0 0 6px 0' }}>
+          Open orders are imported from Excel files (<code>data/open-orders/YYYY-MM-open.xlsx</code>).
         </p>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          <button onClick={handleOpenOrdersToday} disabled={openLoading} className="btn-accent">
-            {openLoading ? 'Importing...' : 'Import Current Month'}
-          </button>
-          <span style={{ color: '#868e96', fontSize: '12px' }}>or</span>
-          <input
-            type="month"
-            value={openYearMonth}
-            onChange={(e) => setOpenYearMonth(e.target.value)}
-            style={{ padding: '6px 10px', border: '1px solid #dee2e6', borderRadius: '6px', fontSize: '13px' }}
-          />
-          <button
-            onClick={() => handleOpenOrdersFetch(`${openYearMonth}-01`)}
-            disabled={openLoading || !openYearMonth}
-            style={{
-              padding: '6px 14px', border: '1px solid #03374f', borderRadius: '6px',
-              background: 'transparent', color: '#03374f', fontSize: '13px', cursor: 'pointer',
-              fontWeight: 600, opacity: openLoading ? 0.5 : 1
-            }}
-          >
-            Import Month
-          </button>
-          {openLoading && <span style={{ fontSize: '12px', color: '#868e96' }}>Fetching from SoftPro API...</span>}
+        <p style={{ fontSize: '12px', color: '#868e96', margin: '0 0 10px 0' }}>
+          To update: upload the Excel file, then run <code>node scripts/import-open-orders.js</code> on the server.
+        </p>
+        <div style={{ padding: '8px 12px', background: '#fff8e1', borderRadius: '6px', fontSize: '12px', color: '#795548' }}>
+          <strong>Note:</strong> The SoftPro <code>getOpeningData</code> API only returns orders with revenue (closed), not full pipeline open orders. Excel remains the source of truth for open order counts.
         </div>
-        {openResult && (
-          <div style={{ marginTop: '12px', padding: '10px 14px', borderRadius: '6px', fontSize: '13px', background: openResult.success ? '#ecfdf5' : '#fef2f2', color: openResult.success ? '#065f46' : '#991b1b' }}>
-            {openResult.success
-              ? <><strong>Success!</strong> {openResult.inserted} open orders imported for {openResult.month} (replaced {openResult.deleted} existing)</>
-              : <><strong>Error:</strong> {openResult.error}</>
-            }
-          </div>
-        )}
       </div>
 
       {/* Available months (Revenue) */}

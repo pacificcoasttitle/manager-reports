@@ -155,8 +155,12 @@ app.get('/api/reports/tsg-production', async (req, res) => {
 // ============================================
 // OPEN ORDERS IMPORT ENDPOINTS
 // ============================================
+// NOTE: The SoftPro getOpeningData API endpoint only returns orders that have
+// revenue (closed orders opened in that month) — NOT all open/pipeline orders.
+// For accurate open order counts, use the Excel import (scripts/import-open-orders.js).
+// These routes are kept for future use if SoftPro provides a proper open orders endpoint.
 
-// Import open orders for a specific month
+// Import open orders for a specific month (API — limited, see note above)
 // POST /api/import/open-orders  body: { date: "YYYY-MM-DD" }
 app.post('/api/import/open-orders', async (req, res) => {
   const { date } = req.body; // e.g. "2026-02-01"
