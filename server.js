@@ -3,7 +3,7 @@ const cors = require('cors');
 require('dotenv').config();
 
 const pool = require('./database/pool');
-const { fetchAndStore } = require('./lib/softpro-client');
+const { fetchAndStore, fetchOpenOrders, importOpenOrders } = require('./lib/softpro-client');
 const reports = require('./lib/reports');
 
 const app = express();
@@ -153,29 +153,55 @@ app.get('/api/reports/tsg-production', async (req, res) => {
 });
 
 // ============================================
-// DEBUG: Open Orders API sample (temporary — remove after field mapping confirmed)
+// OPEN ORDERS IMPORT ENDPOINTS
 // ============================================
-app.get('/api/debug/open-orders-sample', async (req, res) => {
+
+// Import open orders for a specific month
+// POST /api/import/open-orders  body: { date: "YYYY-MM-DD" }
+app.post('/api/import/open-orders', async (req, res) => {
+  const { date } = req.body; // e.g. "2026-02-01"
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return res.status(400).json({ error: 'date required in YYYY-MM-DD format (first of month)' });
+  }
+
   try {
-    const date = req.query.date || '2026-02-01';
-    const API_BASE = process.env.SOFTPRO_API_BASE || 'http://100.29.181.61:3000/api';
-    const url = `${API_BASE}/powerbi/getOpeningData?userPostedDate=${date}`;
-    console.log(`Debug: Fetching open orders sample from ${url}`);
-    
-    const axios = require('axios');
-    const response = await axios.get(url, {
-      timeout: 120000,
-      headers: { 'Content-Type': 'application/json' }
-    });
-    const result = response.data;
-    
-    res.json({
-      totalRecords: result.data?.length || 0,
-      sampleRecords: (result.data || []).slice(0, 3),
-      allFields: result.data?.[0] ? Object.keys(result.data[0]) : [],
-      status: result.Status,
-      message: result.Message
-    });
+    const yearMonth = date.substring(0, 7);
+    const records = await fetchOpenOrders(date);
+    const result = await importOpenOrders(records, yearMonth);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    console.error('Open orders import error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Import current month open orders (for daily cron / quick button)
+app.post('/api/import/open-orders-today', async (req, res) => {
+  try {
+    const today = new Date();
+    const firstOfMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
+    const yearMonth = firstOfMonth.substring(0, 7);
+
+    const records = await fetchOpenOrders(firstOfMonth);
+    const result = await importOpenOrders(records, yearMonth);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    console.error('Open orders today import error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get open orders summary (counts by month)
+app.get('/api/open-orders/summary', async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT open_month, COUNT(*) as order_count, 
+             COUNT(DISTINCT branch) as branch_count
+      FROM open_orders
+      GROUP BY open_month
+      ORDER BY open_month DESC
+    `);
+    res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
