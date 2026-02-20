@@ -212,6 +212,38 @@ app.get('/api/open-orders/summary', async (req, res) => {
 });
 
 // ============================================
+// TEMPORARY DEBUG: Test SoftPro getOpeningData API
+// ============================================
+app.get('/api/debug/open-orders-test', async (req, res) => {
+  try {
+    const date = req.query.date || '2026-02-01';
+    const url = `${process.env.SOFTPRO_API_BASE}/powerbi/getOpeningData?userPostedDate=${date}`;
+    const response = await fetch(url, {
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const result = await response.json();
+
+    // Deduplicate by order number
+    const orderMap = {};
+    for (const r of (result.data || [])) {
+      const num = r['[Number]'];
+      if (num && !orderMap[num]) orderMap[num] = r;
+    }
+    const unique = Object.keys(orderMap);
+
+    res.json({
+      date,
+      totalLineItems: result.data?.length || 0,
+      uniqueOrders: unique.length,
+      sampleOrders: unique.slice(0, 5),
+      sampleRecord: result.data?.[0] || null
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================
 // DATA EXPLORER (for debugging/validation)
 // ============================================
 
