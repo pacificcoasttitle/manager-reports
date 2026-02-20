@@ -153,14 +153,12 @@ app.get('/api/reports/tsg-production', async (req, res) => {
 });
 
 // ============================================
-// OPEN ORDERS IMPORT ENDPOINTS
+// OPEN ORDERS IMPORT ENDPOINTS (SoftPro getOpeningData API)
 // ============================================
-// NOTE: The SoftPro getOpeningData API endpoint only returns orders that have
-// revenue (closed orders opened in that month) — NOT all open/pipeline orders.
-// For accurate open order counts, use the Excel import (scripts/import-open-orders.js).
-// These routes are kept for future use if SoftPro provides a proper open orders endpoint.
+// API confirmed working Feb 2026 — returns 1 record per unique order.
+// Returns all orders with a ReceivedDate in the given month.
 
-// Import open orders for a specific month (API — limited, see note above)
+// Import open orders for a specific month
 // POST /api/import/open-orders  body: { date: "YYYY-MM-DD" }
 app.post('/api/import/open-orders', async (req, res) => {
   const { date } = req.body; // e.g. "2026-02-01"
@@ -206,42 +204,6 @@ app.get('/api/open-orders/summary', async (req, res) => {
       ORDER BY open_month DESC
     `);
     res.json(rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ============================================
-// TEMPORARY DEBUG: Test SoftPro getOpeningData API
-// ============================================
-app.get('/api/debug/open-orders-test', async (req, res) => {
-  try {
-    const date = req.query.date || '2026-02-01';
-    const apiBase = (process.env.SOFTPRO_API_BASE && process.env.SOFTPRO_API_BASE !== 'undefined')
-      ? process.env.SOFTPRO_API_BASE
-      : 'http://100.29.181.61:3000/api';
-    const url = `${apiBase}/powerbi/getOpeningData?userPostedDate=${date}`;
-    console.log(`Debug open-orders-test: hitting ${url}`);
-    const response = await fetch(url, {
-      headers: { 'Content-Type': 'application/json' }
-    });
-    const result = await response.json();
-
-    // Deduplicate by order number
-    const orderMap = {};
-    for (const r of (result.data || [])) {
-      const num = r['[Number]'];
-      if (num && !orderMap[num]) orderMap[num] = r;
-    }
-    const unique = Object.keys(orderMap);
-
-    res.json({
-      date,
-      totalLineItems: result.data?.length || 0,
-      uniqueOrders: unique.length,
-      sampleOrders: unique.slice(0, 5),
-      sampleRecord: result.data?.[0] || null
-    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
