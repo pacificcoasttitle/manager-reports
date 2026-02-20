@@ -41,6 +41,22 @@ export default function TessaChat({ month, year }) {
     setInput('');
     setSidePanel(null);
 
+    // Build conversation history from current messages (snapshot before adding new ones).
+    // Pair user + assistant turns — send only sql/explanation/rowCount, not raw row data.
+    const history = [];
+    for (let i = 0; i + 1 < messages.length; i += 2) {
+      const u = messages[i];
+      const a = messages[i + 1];
+      if (u?.role === 'user' && a?.role === 'assistant') {
+        history.push({
+          question: u.content,
+          sql: a.sql || null,
+          explanation: a.content || '',
+          rowCount: a.rowCount || 0
+        });
+      }
+    }
+
     const userMsg = { role: 'user', content: q, timestamp: new Date() };
     setMessages(prev => [...prev, userMsg]);
     setLoading(true);
@@ -48,7 +64,7 @@ export default function TessaChat({ month, year }) {
     try {
       const result = await api('/api/tessa/ask', {
         method: 'POST',
-        body: JSON.stringify({ question: q })
+        body: JSON.stringify({ question: q, history })
       });
 
       const assistantMsg = {

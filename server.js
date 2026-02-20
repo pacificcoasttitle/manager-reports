@@ -348,10 +348,12 @@ app.get('/api/reports/discrepancies', async (req, res) => {
 const { askTessa, saveQuestion, getHistory } = require('./lib/tessa');
 
 app.post('/api/tessa/ask', async (req, res) => {
-  const { question } = req.body;
+  const { question, history } = req.body;
   if (!question) return res.status(400).json({ error: 'Question is required' });
   try {
-    const result = await askTessa(question);
+    // Cap history at 10 turns to stay within token limits
+    const trimmedHistory = Array.isArray(history) ? history.slice(-10) : [];
+    const result = await askTessa(question, trimmedHistory);
     await saveQuestion(question, result);
     res.json(result);
   } catch (err) {
