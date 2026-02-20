@@ -217,8 +217,11 @@ app.get('/api/open-orders/summary', async (req, res) => {
 app.get('/api/debug/open-orders-test', async (req, res) => {
   try {
     const date = req.query.date || '2026-02-01';
-    const apiBase = process.env.SOFTPRO_API_BASE || 'http://100.29.181.61:3000/api';
+    const apiBase = (process.env.SOFTPRO_API_BASE && process.env.SOFTPRO_API_BASE !== 'undefined')
+      ? process.env.SOFTPRO_API_BASE
+      : 'http://100.29.181.61:3000/api';
     const url = `${apiBase}/powerbi/getOpeningData?userPostedDate=${date}`;
+    console.log(`Debug open-orders-test: hitting ${url}`);
     const response = await fetch(url, {
       headers: { 'Content-Type': 'application/json' }
     });
