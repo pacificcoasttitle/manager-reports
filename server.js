@@ -6,6 +6,7 @@ require('dotenv').config();
 const pool = require('./database/pool');
 const { fetchAndStore, fetchOpenOrders, importOpenOrders } = require('./lib/softpro-client');
 const reports = require('./lib/reports');
+const { buildDailyReportHtml, sendDailyReport } = require('./lib/daily-email');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -243,6 +244,34 @@ app.get('/api/import/log', async (req, res) => {
     );
     res.json(rows);
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================
+// DAILY EMAIL REPORT
+// ============================================
+
+// Preview in browser — renders HTML without sending
+// GET /api/email/daily-report/preview?date=YYYY-MM-DD (optional date override)
+app.get('/api/email/daily-report/preview', async (req, res) => {
+  try {
+    const { html } = await buildDailyReportHtml(req.query.date || null);
+    res.send(html);
+  } catch (err) {
+    console.error('Preview error:', err);
+    res.status(500).send(`<pre style="color:red">${err.message}\n\n${err.stack}</pre>`);
+  }
+});
+
+// Send report now (manual trigger / test)
+// POST /api/email/daily-report  body: { date: 'YYYY-MM-DD' } (optional)
+app.post('/api/email/daily-report', async (req, res) => {
+  try {
+    const result = await sendDailyReport(req.body?.date || null);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    console.error('Send email error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -529,6 +558,26 @@ cron.schedule('* * * * *', async () => {
       console.log(`Cron open orders: ${openResult.inserted} orders for ${yearMonth}`);
     } catch (err) {
       console.error('Cron open orders FAILED:', err.message);
+    }
+
+    // 3. Send daily email report (after data is fresh)
+    try {
+      const emailResult = await sendDailyReport();
+      if (emailResult.sent) {
+        console.log(`Cron email: sent to ${emailResult.recipients.join(', ')}`);
+        await pool.query(`
+          INSERT INTO import_log (import_type, month, records_imported, success, duration_ms, triggered_by)
+          VALUES ('daily_email', $1, $2, true, 0, 'cron')
+        `, [yearMonth, emailResult.recipients.length]).catch(() => {});
+      } else {
+        console.log(`Cron email: skipped — ${emailResult.reason}`);
+      }
+    } catch (err) {
+      console.error('Cron email FAILED:', err.message);
+      await pool.query(`
+        INSERT INTO import_log (import_type, month, success, error_message, triggered_by)
+        VALUES ('daily_email', $1, false, $2, 'cron')
+      `, [yearMonth, err.message]).catch(() => {});
     }
 
     console.log('=== NIGHTLY IMPORT COMPLETE ===', new Date().toISOString());

@@ -22,6 +22,13 @@ export default function FetchManager() {
   const [cronTime, setCronTime] = useState('21:00');
   const [cronSaving, setCronSaving] = useState(false);
 
+  // Email state
+  const [emailEnabled, setEmailEnabled] = useState(true);
+  const [emailRecipients, setEmailRecipients] = useState('');
+  const [emailSaving, setEmailSaving] = useState(false);
+  const [emailSending, setEmailSending] = useState(false);
+  const [emailResult, setEmailResult] = useState(null);
+
   useEffect(() => {
     loadData();
     const now = new Date();
@@ -46,12 +53,14 @@ export default function FetchManager() {
       const log = await api('/api/import/log');
       setImportLog(log);
     } catch (err) { console.error('Import log:', err); }
-    // Load cron settings
+    // Load cron + email settings
     try {
       const settings = await api('/api/settings/app');
       if (settings.cron_enabled !== undefined) setCronEnabled(settings.cron_enabled === 'true');
       if (settings.cron_time) setCronTime(settings.cron_time);
-    } catch (err) { console.error('Cron settings:', err); }
+      if (settings.daily_email_enabled !== undefined) setEmailEnabled(settings.daily_email_enabled !== 'false');
+      if (settings.daily_report_recipients) setEmailRecipients(settings.daily_report_recipients);
+    } catch (err) { console.error('Settings:', err); }
   }
 
   async function handleFetch() {
@@ -95,6 +104,38 @@ export default function FetchManager() {
     } catch (err) {
       setOpenResult({ success: false, error: err.message });
     } finally { setOpenLoading(false); }
+  }
+
+  async function saveEmailSettings(enabled, recipients) {
+    setEmailSaving(true);
+    try {
+      await api('/api/settings/app', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'daily_email_enabled', value: String(enabled) })
+      });
+      await api('/api/settings/app', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'daily_report_recipients', value: recipients })
+      });
+      setEmailEnabled(enabled);
+      setEmailRecipients(recipients);
+    } catch (err) {
+      console.error('Failed to save email settings:', err);
+    } finally { setEmailSaving(false); }
+  }
+
+  async function sendTestEmail() {
+    if (emailSending) return;
+    setEmailSending(true);
+    setEmailResult(null);
+    try {
+      const res = await api('/api/email/daily-report', { method: 'POST' });
+      setEmailResult({ success: true, ...res });
+    } catch (err) {
+      setEmailResult({ success: false, error: err.message });
+    } finally { setEmailSending(false); }
   }
 
   async function saveCronSettings(enabled, time) {
@@ -239,6 +280,68 @@ export default function FetchManager() {
             ? `Auto-imports revenue + open orders for the current month every day at ${cronTime} Pacific.`
             : 'Automated imports are disabled. Use the buttons above for manual imports.'}
         </p>
+      </div>
+
+      {/* Daily Email Settings */}
+      <div className="fetch-card">
+        <h3>Daily Email Report</h3>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={emailEnabled}
+              onChange={(e) => saveEmailSettings(e.target.checked, emailRecipients)}
+              style={{ width: '16px', height: '16px' }}
+            />
+            Send daily email after nightly import
+          </label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <label style={{ fontSize: '12px', color: '#495057', whiteSpace: 'nowrap' }}>Recipients:</label>
+            <input
+              type="text"
+              value={emailRecipients}
+              onChange={(e) => setEmailRecipients(e.target.value)}
+              placeholder="ceo@pct.com, gm@pct.com"
+              style={{ flex: 1, minWidth: '200px', padding: '6px 10px', border: '1px solid #dee2e6', borderRadius: '6px', fontSize: '12px' }}
+            />
+            <button
+              onClick={() => saveEmailSettings(emailEnabled, emailRecipients)}
+              disabled={emailSaving}
+              className="btn-accent"
+              style={{ padding: '6px 14px', fontSize: '12px' }}
+            >
+              {emailSaving ? 'Saving...' : 'Save'}
+            </button>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <button
+              onClick={sendTestEmail}
+              disabled={emailSending}
+              className="btn-accent"
+              style={{ background: '#495057', fontSize: '12px', padding: '6px 14px' }}
+            >
+              {emailSending ? 'Sending...' : '📧 Send Test Email'}
+            </button>
+            <a
+              href="https://manager-reports.onrender.com/api/email/daily-report/preview"
+              target="_blank"
+              rel="noreferrer"
+              style={{ fontSize: '12px', color: '#1971c2', textDecoration: 'none' }}
+            >
+              👁 Preview Email →
+            </a>
+          </div>
+          {emailResult && (
+            <div style={{ padding: '8px 12px', borderRadius: '6px', fontSize: '12px', background: emailResult.success ? '#ecfdf5' : '#fef2f2', color: emailResult.success ? '#065f46' : '#991b1b' }}>
+              {emailResult.success
+                ? emailResult.sent
+                  ? <>✓ Sent to: {emailResult.recipients?.join(', ')}</>
+                  : <>Not sent: {emailResult.reason}</>
+                : <><strong>Error:</strong> {emailResult.error}</>
+              }
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Import History (unified log) */}
