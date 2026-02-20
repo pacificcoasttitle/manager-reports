@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const cron = require('node-cron');
 require('dotenv').config();
 
 const pool = require('./database/pool');
@@ -8,6 +9,29 @@ const reports = require('./lib/reports');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// ============================================
+// IMPORT LOGGING HELPER
+// ============================================
+async function logImport(importType, month, triggeredBy, fn) {
+  const start = Date.now();
+  try {
+    const result = await fn();
+    const duration = Date.now() - start;
+    await pool.query(`
+      INSERT INTO import_log (import_type, month, records_imported, records_deleted, success, duration_ms, triggered_by)
+      VALUES ($1, $2, $3, $4, true, $5, $6)
+    `, [importType, month, result.inserted || result.unique_orders || 0, result.deleted || 0, duration, triggeredBy]);
+    return result;
+  } catch (err) {
+    const duration = Date.now() - start;
+    await pool.query(`
+      INSERT INTO import_log (import_type, month, success, error_message, duration_ms, triggered_by)
+      VALUES ($1, $2, false, $3, $4, $5)
+    `, [importType, month, err.message, duration, triggeredBy]).catch(() => {});
+    throw err;
+  }
+}
 
 // Middleware
 app.use(cors({
@@ -42,7 +66,7 @@ app.post('/api/fetch/:yearMonth', async (req, res) => {
   }
   
   try {
-    const meta = await fetchAndStore(yearMonth);
+    const meta = await logImport('revenue', yearMonth, 'manual', () => fetchAndStore(yearMonth));
     res.json({ success: true, ...meta });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -168,8 +192,9 @@ app.post('/api/import/open-orders', async (req, res) => {
 
   try {
     const yearMonth = date.substring(0, 7);
-    const records = await fetchOpenOrders(date);
-    const result = await importOpenOrders(records, yearMonth);
+    const result = await logImport('open_orders', yearMonth, 'manual', () =>
+      fetchOpenOrders(date).then(records => importOpenOrders(records, yearMonth))
+    );
     res.json({ success: true, ...result });
   } catch (err) {
     console.error('Open orders import error:', err);
@@ -184,8 +209,9 @@ app.post('/api/import/open-orders-today', async (req, res) => {
     const firstOfMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
     const yearMonth = firstOfMonth.substring(0, 7);
 
-    const records = await fetchOpenOrders(firstOfMonth);
-    const result = await importOpenOrders(records, yearMonth);
+    const result = await logImport('open_orders', yearMonth, 'manual', () =>
+      fetchOpenOrders(firstOfMonth).then(records => importOpenOrders(records, yearMonth))
+    );
     res.json({ success: true, ...result });
   } catch (err) {
     console.error('Open orders today import error:', err);
@@ -203,6 +229,18 @@ app.get('/api/open-orders/summary', async (req, res) => {
       GROUP BY open_month
       ORDER BY open_month DESC
     `);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get import log (both revenue and open orders)
+app.get('/api/import/log', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT * FROM import_log ORDER BY started_at DESC LIMIT 50'
+    );
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -434,6 +472,72 @@ app.put('/api/settings/app', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// ============================================
+// NIGHTLY CRON: Automated Revenue + Open Orders Import
+// ============================================
+// Checks every minute. Only runs at the scheduled time if cron_enabled = true.
+// Default: 9:00 PM Pacific daily (configurable via app_settings).
+let cronLastRun = ''; // prevent double-runs within the same minute
+
+cron.schedule('* * * * *', async () => {
+  try {
+    // Check if cron is enabled
+    const { rows: enabledRows } = await pool.query(
+      "SELECT value FROM app_settings WHERE key = 'cron_enabled'"
+    );
+    if (enabledRows[0]?.value !== 'true') return;
+
+    // Get scheduled time
+    const { rows: timeRows } = await pool.query(
+      "SELECT value FROM app_settings WHERE key = 'cron_time'"
+    );
+    const scheduledTime = timeRows[0]?.value || '21:00';
+    const [schedHour, schedMin] = scheduledTime.split(':').map(Number);
+
+    // Get current Pacific time
+    const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
+    const currentHour = now.getHours();
+    const currentMin = now.getMinutes();
+
+    if (currentHour !== schedHour || currentMin !== schedMin) return;
+
+    // Prevent double-run within same minute
+    const runKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}-${currentHour}-${currentMin}`;
+    if (cronLastRun === runKey) return;
+    cronLastRun = runKey;
+
+    console.log('=== NIGHTLY IMPORT STARTED ===', new Date().toISOString());
+
+    const today = new Date();
+    const yearMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+    const firstOfMonth = `${yearMonth}-01`;
+
+    // 1. Import Revenue (current month)
+    try {
+      const revResult = await logImport('revenue', yearMonth, 'cron', () => fetchAndStore(yearMonth));
+      console.log(`Cron revenue: ${revResult.unique_orders} orders, $${revResult.total_revenue?.toFixed(2)} for ${yearMonth}`);
+    } catch (err) {
+      console.error('Cron revenue FAILED:', err.message);
+    }
+
+    // 2. Import Open Orders (current month)
+    try {
+      const openResult = await logImport('open_orders', yearMonth, 'cron', () =>
+        fetchOpenOrders(firstOfMonth).then(records => importOpenOrders(records, yearMonth))
+      );
+      console.log(`Cron open orders: ${openResult.inserted} orders for ${yearMonth}`);
+    } catch (err) {
+      console.error('Cron open orders FAILED:', err.message);
+    }
+
+    console.log('=== NIGHTLY IMPORT COMPLETE ===', new Date().toISOString());
+  } catch (err) {
+    console.error('Cron scheduler error:', err.message);
+  }
+});
+
+console.log('Nightly import cron scheduled (checks every minute, runs at configured time)');
 
 // ============================================
 // START SERVER
