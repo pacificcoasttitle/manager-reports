@@ -18,7 +18,7 @@ import SettingsPage from '../components/SettingsPage';
 import ReconciliationBar from '../components/ReconciliationBar';
 
 const NAV_ITEMS = [
-  { id: 'daily-revenue', label: 'Daily Revenue', iconKey: 'chart', endpoint: '/api/reports/daily-revenue', section: 'reports' },
+  { id: 'daily-revenue', label: 'Title Revenue', iconKey: 'chart', endpoint: '/api/reports/daily-revenue', section: 'reports' },
   { id: 'r14-branches', label: 'R-14 Branches', iconKey: 'branches', endpoint: '/api/reports/r14-branches', section: 'reports' },
   { id: 'r14-ranking', label: 'R-14 Ranking', iconKey: 'ranking', endpoint: '/api/reports/r14-ranking', section: 'reports' },
   { id: 'title-officer', label: 'Title Officer', iconKey: 'title', endpoint: '/api/reports/title-officer', section: 'reports' },

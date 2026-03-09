@@ -23,6 +23,7 @@ export default function ReconciliationBar({ month, year }) {
   const ok = reconciled && rankingMatch;
   const bg = ok ? '#f0fdf4' : '#fef2f2';
   const border = ok ? '#86efac' : '#fca5a5';
+  const topBorder = ok ? '#22c55e' : '#ef4444';
   const icon = ok ? '✓' : '✗';
   const iconColor = ok ? '#16a34a' : '#dc2626';
   const label = ok ? 'Numbers Reconciled' : 'Revenue Mismatch Detected';
@@ -31,10 +32,11 @@ export default function ReconciliationBar({ month, year }) {
     <div style={{
       background: bg,
       border: `1px solid ${border}`,
-      borderRadius: '8px',
-      padding: '12px 24px',
-      margin: '0 24px 16px',
-      maxHeight: '80px',
+      borderTop: `3px solid ${topBorder}`,
+      borderRadius: '10px',
+      padding: '16px 24px',
+      margin: '20px 24px 16px',
+      boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
       display: 'flex',
       flexDirection: 'column',
       gap: '6px'
@@ -69,7 +71,7 @@ function Column({ label, value, sub, accent, matchColor }) {
   return (
     <div style={{ textAlign: 'center', flex: 1 }}>
       <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{label}</div>
-      <div style={{ fontSize: '18px', fontWeight: 700, color: accent ? '#03374f' : '#374151', lineHeight: 1.2 }}>{value}</div>
+      <div style={{ fontSize: '20px', fontWeight: 700, color: accent ? '#03374f' : '#374151', lineHeight: 1.2 }}>{value}</div>
       <div style={{ fontSize: '11px', color: matchColor || '#9ca3af' }}>{sub}</div>
     </div>
   );
@@ -77,7 +79,7 @@ function Column({ label, value, sub, accent, matchColor }) {
 
 function Operator({ children }) {
   return (
-    <div style={{ fontSize: '16px', fontWeight: 600, color: '#9ca3af', flexShrink: 0, paddingTop: '10px' }}>
+    <div style={{ fontSize: '16px', fontWeight: 600, color: '#9ca3af', flexShrink: 0, paddingTop: '10px', padding: '10px 8px 0' }}>
       {children}
     </div>
   );
