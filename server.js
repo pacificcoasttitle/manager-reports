@@ -178,6 +178,77 @@ app.get('/api/reports/tsg-production', async (req, res) => {
 });
 
 // ============================================
+// RECONCILIATION ENDPOINT
+// ============================================
+app.get('/api/reports/reconciliation', async (req, res) => {
+  const { month, year } = req.query;
+  const yearMonth = `${year}-${String(month).padStart(2, '0')}`;
+  
+  try {
+    const { rows: dailyRevRows } = await pool.query(`
+      SELECT 
+        ROUND(SUM(CASE WHEN category IN ('Purchase', 'Refinance', 'TSG') THEN total_revenue ELSE 0 END)::numeric, 2) as daily_revenue_total,
+        ROUND(SUM(CASE WHEN category = 'Escrow' THEN total_revenue ELSE 0 END)::numeric, 2) as escrow_total,
+        ROUND(SUM(total_revenue)::numeric, 2) as grand_total,
+        COUNT(*) as total_orders,
+        COUNT(*) FILTER (WHERE category IN ('Purchase', 'Refinance', 'TSG')) as title_orders,
+        COUNT(*) FILTER (WHERE category = 'Escrow') as escrow_orders
+      FROM order_summary
+      WHERE fetch_month = $1
+    `, [yearMonth]);
+    
+    const { rows: rankingRows } = await pool.query(`
+      SELECT ROUND(SUM(total_revenue)::numeric, 2) as ranking_total
+      FROM order_summary
+      WHERE fetch_month = $1
+        AND sales_rep IS NOT NULL AND sales_rep != ''
+    `, [yearMonth]);
+    
+    const { rows: breakdownRows } = await pool.query(`
+      SELECT 
+        ROUND(SUM(title_revenue)::numeric, 2) as title_rev,
+        ROUND(SUM(escrow_revenue)::numeric, 2) as escrow_rev,
+        ROUND(SUM(tsg_revenue)::numeric, 2) as tsg_rev,
+        ROUND(SUM(underwriter_revenue)::numeric, 2) as uw_rev,
+        ROUND(SUM(total_revenue)::numeric, 2) as total_rev
+      FROM order_summary
+      WHERE fetch_month = $1
+    `, [yearMonth]);
+    
+    const daily = parseFloat(dailyRevRows[0].daily_revenue_total) || 0;
+    const escrow = parseFloat(dailyRevRows[0].escrow_total) || 0;
+    const grand = parseFloat(dailyRevRows[0].grand_total) || 0;
+    const ranking = parseFloat(rankingRows[0].ranking_total) || 0;
+    
+    const unassignedRevenue = grand - ranking;
+    
+    const reconciled = Math.abs((daily + escrow) - grand) < 0.01;
+    const rankingMatch = Math.abs(ranking - grand) < 1.00;
+    
+    res.json({
+      dailyRevenueTotal: daily,
+      escrowTotal: escrow,
+      grandTotal: grand,
+      rankingTotal: ranking,
+      unassignedRevenue: unassignedRevenue,
+      titleOrders: parseInt(dailyRevRows[0].title_orders),
+      escrowOrders: parseInt(dailyRevRows[0].escrow_orders),
+      totalOrders: parseInt(dailyRevRows[0].total_orders),
+      breakdown: breakdownRows[0],
+      reconciled: reconciled,
+      rankingMatch: rankingMatch,
+      checks: {
+        dailyPlusEscrow: reconciled ? '✓' : '✗',
+        rankingMatchesTotal: rankingMatch ? '✓' : '✗',
+        formula: `Daily Revenue ($${daily.toLocaleString()}) + Escrow ($${escrow.toLocaleString()}) = $${(daily + escrow).toLocaleString()} vs Grand Total $${grand.toLocaleString()}`
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================
 // OPEN ORDERS IMPORT ENDPOINTS (SoftPro getOpeningData API)
 // ============================================
 // API confirmed working Feb 2026 — returns 1 record per unique order.

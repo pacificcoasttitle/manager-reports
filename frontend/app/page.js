@@ -15,6 +15,7 @@ import DiscrepanciesReport from '../components/DiscrepanciesReport';
 import FetchManager from '../components/FetchManager';
 import TessaChat from '../components/TessaChat';
 import SettingsPage from '../components/SettingsPage';
+import ReconciliationBar from '../components/ReconciliationBar';
 
 const NAV_ITEMS = [
   { id: 'daily-revenue', label: 'Daily Revenue', iconKey: 'chart', endpoint: '/api/reports/daily-revenue', section: 'reports' },
@@ -199,6 +200,11 @@ export default function Home() {
             )}
           </div>
         </div>
+
+        {/* Reconciliation Bar */}
+        {isReportTab && !loading && (
+          <ReconciliationBar month={month} year={year} />
+        )}
 
         {/* KPI Cards */}
         {isReportTab && showKPI && data && !loading && (

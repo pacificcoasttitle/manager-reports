@@ -6,7 +6,11 @@ export default function EscrowProductionReport({ data }) {
   if (!data || !data.report) return <p style={{ color: '#868e96', padding: '40px 0', textAlign: 'center' }}>No data available.</p>;
 
   const { report, dates } = data;
-  const branches = Object.keys(report);
+  const branches = Object.keys(report).sort((a, b) => {
+    if (a === 'Unassigned') return 1;
+    if (b === 'Unassigned') return -1;
+    return a.localeCompare(b);
+  });
 
   return (
     <div>
