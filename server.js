@@ -398,6 +398,98 @@ app.get('/api/stats/:yearMonth', async (req, res) => {
 });
 
 // ============================================
+// LIVE DATA EXPLORER
+// ============================================
+const ALLOWED_SORT_COLS = ['file_number','branch','category','sales_rep','title_officer','escrow_officer','transaction_date','received_date','title_revenue','escrow_revenue','tsg_revenue','underwriter_revenue','total_revenue'];
+
+app.get('/api/data/orders', async (req, res) => {
+  try {
+    const { month } = req.query;
+    if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+      return res.status(400).json({ error: 'month param required (YYYY-MM)' });
+    }
+
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 50));
+    const offset = (page - 1) * limit;
+
+    const sortCol = ALLOWED_SORT_COLS.includes(req.query.sort) ? req.query.sort : 'transaction_date';
+    const sortDir = req.query.dir === 'asc' ? 'ASC' : 'DESC';
+
+    const conditions = ['fetch_month = $1'];
+    const params = [month];
+    let paramIdx = 2;
+
+    if (req.query.branch) {
+      conditions.push(`branch = $${paramIdx++}`);
+      params.push(req.query.branch);
+    }
+    if (req.query.category) {
+      conditions.push(`category = $${paramIdx++}`);
+      params.push(req.query.category);
+    }
+    if (req.query.salesRep) {
+      conditions.push(`sales_rep = $${paramIdx++}`);
+      params.push(req.query.salesRep);
+    }
+    if (req.query.titleOfficer) {
+      conditions.push(`title_officer = $${paramIdx++}`);
+      params.push(req.query.titleOfficer);
+    }
+    if (req.query.search) {
+      conditions.push(`file_number ILIKE $${paramIdx++}`);
+      params.push(`%${req.query.search}%`);
+    }
+
+    const where = conditions.join(' AND ');
+
+    const [dataResult, countResult, filterResult] = await Promise.all([
+      pool.query(
+        `SELECT file_number, branch, category, order_type, trans_type,
+                sales_rep, title_officer, escrow_officer,
+                title_revenue, escrow_revenue, tsg_revenue, underwriter_revenue, total_revenue,
+                transaction_date, received_date
+         FROM order_summary
+         WHERE ${where}
+         ORDER BY ${sortCol} ${sortDir} NULLS LAST, file_number ASC
+         LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`,
+        [...params, limit, offset]
+      ),
+      pool.query(
+        `SELECT COUNT(*) as total, ROUND(COALESCE(SUM(total_revenue),0)::numeric, 2) as total_revenue
+         FROM order_summary WHERE ${where}`,
+        params
+      ),
+      pool.query(
+        `SELECT
+           array_agg(DISTINCT branch ORDER BY branch) FILTER (WHERE branch IS NOT NULL) as branches,
+           array_agg(DISTINCT category ORDER BY category) FILTER (WHERE category IS NOT NULL) as categories,
+           array_agg(DISTINCT sales_rep ORDER BY sales_rep) FILTER (WHERE sales_rep IS NOT NULL AND sales_rep != '') as sales_reps,
+           array_agg(DISTINCT title_officer ORDER BY title_officer) FILTER (WHERE title_officer IS NOT NULL AND title_officer != '') as title_officers
+         FROM order_summary WHERE fetch_month = $1`,
+        [month]
+      )
+    ]);
+
+    res.json({
+      rows: dataResult.rows,
+      total: parseInt(countResult.rows[0].total),
+      filteredRevenue: parseFloat(countResult.rows[0].total_revenue),
+      page,
+      limit,
+      filters: {
+        branches: filterResult.rows[0].branches || [],
+        categories: filterResult.rows[0].categories || [],
+        salesReps: filterResult.rows[0].sales_reps || [],
+        titleOfficers: filterResult.rows[0].title_officers || []
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================
 // DISCREPANCIES
 // ============================================
 const { runDiscrepancyChecks } = require('./lib/discrepancies');
