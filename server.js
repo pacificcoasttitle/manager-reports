@@ -402,6 +402,47 @@ app.get('/api/stats/:yearMonth', async (req, res) => {
 // ============================================
 const ALLOWED_SORT_COLS = ['file_number','branch','category','sales_rep','title_officer','escrow_officer','transaction_date','received_date','title_revenue','escrow_revenue','tsg_revenue','underwriter_revenue','total_revenue'];
 
+const FILE_BRANCH_CASE = `CASE
+  WHEN os.file_number LIKE '%-GLT' THEN 'Glendale'
+  WHEN os.file_number LIKE '%-OCT' THEN 'Orange'
+  WHEN os.file_number LIKE '%-ONT' THEN 'Inland Empire'
+  WHEN os.file_number LIKE '%-PRV' THEN 'Porterville'
+  WHEN os.file_number LIKE '%-TSG' OR os.file_number LIKE '99%' THEN 'TSG'
+  ELSE 'Unassigned' END`;
+
+function buildExplorerWhere(query) {
+  const conditions = ['os.fetch_month = $1'];
+  const params = [query.month];
+  let idx = 2;
+
+  if (query.branch) {
+    conditions.push(`$${idx} = ${FILE_BRANCH_CASE}`);
+    params.push(query.branch);
+    idx++;
+  }
+  if (query.category) {
+    conditions.push(`os.category = $${idx}`);
+    params.push(query.category);
+    idx++;
+  }
+  if (query.salesRep) {
+    conditions.push(`os.sales_rep = $${idx}`);
+    params.push(query.salesRep);
+    idx++;
+  }
+  if (query.titleOfficer) {
+    conditions.push(`os.title_officer = $${idx}`);
+    params.push(query.titleOfficer);
+    idx++;
+  }
+  if (query.search) {
+    conditions.push(`os.file_number ILIKE $${idx}`);
+    params.push(`%${query.search}%`);
+    idx++;
+  }
+  return { where: conditions.join(' AND '), params, nextIdx: idx };
+}
+
 app.get('/api/data/orders', async (req, res) => {
   try {
     const { month } = req.query;
@@ -416,57 +457,42 @@ app.get('/api/data/orders', async (req, res) => {
     const sortCol = ALLOWED_SORT_COLS.includes(req.query.sort) ? req.query.sort : 'transaction_date';
     const sortDir = req.query.dir === 'asc' ? 'ASC' : 'DESC';
 
-    const conditions = ['fetch_month = $1'];
-    const params = [month];
-    let paramIdx = 2;
-
-    if (req.query.branch) {
-      conditions.push(`branch = $${paramIdx++}`);
-      params.push(req.query.branch);
-    }
-    if (req.query.category) {
-      conditions.push(`category = $${paramIdx++}`);
-      params.push(req.query.category);
-    }
-    if (req.query.salesRep) {
-      conditions.push(`sales_rep = $${paramIdx++}`);
-      params.push(req.query.salesRep);
-    }
-    if (req.query.titleOfficer) {
-      conditions.push(`title_officer = $${paramIdx++}`);
-      params.push(req.query.titleOfficer);
-    }
-    if (req.query.search) {
-      conditions.push(`file_number ILIKE $${paramIdx++}`);
-      params.push(`%${req.query.search}%`);
-    }
-
-    const where = conditions.join(' AND ');
+    const { where, params, nextIdx } = buildExplorerWhere(req.query);
 
     const [dataResult, countResult, filterResult] = await Promise.all([
       pool.query(
-        `SELECT file_number, branch, category, order_type, trans_type,
-                sales_rep, title_officer, escrow_officer,
-                title_revenue, escrow_revenue, tsg_revenue, underwriter_revenue, total_revenue,
-                transaction_date, received_date
-         FROM order_summary
+        `SELECT os.file_number, os.category, os.order_type, os.trans_type,
+                os.sales_rep, os.title_officer, os.escrow_officer,
+                ROUND(os.title_revenue::numeric, 2) as title_revenue,
+                ROUND(os.escrow_revenue::numeric, 2) as escrow_revenue,
+                ROUND(os.tsg_revenue::numeric, 2) as tsg_revenue,
+                ROUND(os.underwriter_revenue::numeric, 2) as underwriter_revenue,
+                ROUND(os.total_revenue::numeric, 2) as total_revenue,
+                os.transaction_date, os.received_date,
+                ${FILE_BRANCH_CASE} as branch
+         FROM order_summary os
          WHERE ${where}
-         ORDER BY ${sortCol} ${sortDir} NULLS LAST, file_number ASC
-         LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`,
+         ORDER BY ${sortCol === 'branch' ? `(${FILE_BRANCH_CASE})` : `os.${sortCol}`} ${sortDir} NULLS LAST, os.file_number ASC
+         LIMIT $${nextIdx} OFFSET $${nextIdx + 1}`,
         [...params, limit, offset]
       ),
       pool.query(
-        `SELECT COUNT(*) as total, ROUND(COALESCE(SUM(total_revenue),0)::numeric, 2) as total_revenue
-         FROM order_summary WHERE ${where}`,
+        `SELECT COUNT(*) as total,
+                ROUND(COALESCE(SUM(os.total_revenue),0)::numeric, 2) as total_revenue,
+                ROUND(COALESCE(SUM(os.title_revenue),0)::numeric, 2) as title_revenue,
+                ROUND(COALESCE(SUM(os.escrow_revenue),0)::numeric, 2) as escrow_revenue,
+                ROUND(COALESCE(SUM(os.tsg_revenue),0)::numeric, 2) as tsg_revenue,
+                ROUND(COALESCE(SUM(os.underwriter_revenue),0)::numeric, 2) as uw_revenue
+         FROM order_summary os WHERE ${where}`,
         params
       ),
       pool.query(
         `SELECT
-           array_agg(DISTINCT branch ORDER BY branch) FILTER (WHERE branch IS NOT NULL) as branches,
-           array_agg(DISTINCT category ORDER BY category) FILTER (WHERE category IS NOT NULL) as categories,
-           array_agg(DISTINCT sales_rep ORDER BY sales_rep) FILTER (WHERE sales_rep IS NOT NULL AND sales_rep != '') as sales_reps,
-           array_agg(DISTINCT title_officer ORDER BY title_officer) FILTER (WHERE title_officer IS NOT NULL AND title_officer != '') as title_officers
-         FROM order_summary WHERE fetch_month = $1`,
+           array_agg(DISTINCT (${FILE_BRANCH_CASE})) as branches,
+           array_agg(DISTINCT os.category ORDER BY os.category) FILTER (WHERE os.category IS NOT NULL) as categories,
+           array_agg(DISTINCT os.sales_rep ORDER BY os.sales_rep) FILTER (WHERE os.sales_rep IS NOT NULL AND os.sales_rep != '') as sales_reps,
+           array_agg(DISTINCT os.title_officer ORDER BY os.title_officer) FILTER (WHERE os.title_officer IS NOT NULL AND os.title_officer != '') as title_officers
+         FROM order_summary os WHERE os.fetch_month = $1`,
         [month]
       )
     ]);
@@ -474,17 +500,66 @@ app.get('/api/data/orders', async (req, res) => {
     res.json({
       rows: dataResult.rows,
       total: parseInt(countResult.rows[0].total),
-      filteredRevenue: parseFloat(countResult.rows[0].total_revenue),
+      summary: {
+        total_revenue: parseFloat(countResult.rows[0].total_revenue) || 0,
+        title_revenue: parseFloat(countResult.rows[0].title_revenue) || 0,
+        escrow_revenue: parseFloat(countResult.rows[0].escrow_revenue) || 0,
+        tsg_revenue: parseFloat(countResult.rows[0].tsg_revenue) || 0,
+        uw_revenue: parseFloat(countResult.rows[0].uw_revenue) || 0
+      },
       page,
       limit,
       filters: {
-        branches: filterResult.rows[0].branches || [],
+        branches: (filterResult.rows[0].branches || []).filter(Boolean).sort(),
         categories: filterResult.rows[0].categories || [],
         salesReps: filterResult.rows[0].sales_reps || [],
         titleOfficers: filterResult.rows[0].title_officers || []
       }
     });
   } catch (err) {
+    console.error('Data explorer error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/data/orders/export', async (req, res) => {
+  try {
+    const { month } = req.query;
+    if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+      return res.status(400).json({ error: 'month param required (YYYY-MM)' });
+    }
+
+    const { where, params } = buildExplorerWhere(req.query);
+
+    const { rows } = await pool.query(`
+      SELECT os.file_number, os.transaction_date, ${FILE_BRANCH_CASE} as branch,
+             os.category, os.order_type, os.trans_type,
+             os.sales_rep, os.title_officer, os.escrow_officer,
+             ROUND(os.title_revenue::numeric, 2) as title_revenue,
+             ROUND(os.escrow_revenue::numeric, 2) as escrow_revenue,
+             ROUND(os.tsg_revenue::numeric, 2) as tsg_revenue,
+             ROUND(os.underwriter_revenue::numeric, 2) as underwriter_revenue,
+             ROUND(os.total_revenue::numeric, 2) as total_revenue
+      FROM order_summary os
+      WHERE ${where}
+      ORDER BY os.transaction_date DESC
+    `, params);
+
+    const headers = ['File Number','Date','Branch','Category','Order Type','Trans Type',
+      'Sales Rep','Title Officer','Escrow Officer','Title Rev','Escrow Rev',
+      'TSG Rev','UW Rev','Total Rev'];
+    const csvRows = rows.map(r => [
+      r.file_number, r.transaction_date, r.branch, r.category, r.order_type, r.trans_type,
+      r.sales_rep, r.title_officer, r.escrow_officer, r.title_revenue, r.escrow_revenue,
+      r.tsg_revenue, r.underwriter_revenue, r.total_revenue
+    ].map(v => `"${(v == null ? '' : String(v)).replace(/"/g, '""')}"`).join(','));
+
+    const csv = [headers.join(','), ...csvRows].join('\n');
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=orders-${month}.csv`);
+    res.send(csv);
+  } catch (err) {
+    console.error('CSV export error:', err);
     res.status(500).json({ error: err.message });
   }
 });
