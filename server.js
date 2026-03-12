@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const cron = require('node-cron');
+const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 
 const pool = require('./database/pool');
@@ -560,6 +561,276 @@ app.get('/api/data/orders/export', async (req, res) => {
     res.send(csv);
   } catch (err) {
     console.error('CSV export error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================
+// BILL CODE MANAGER
+// ============================================
+app.get('/api/admin/bill-codes', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT * FROM bill_code_classifications ORDER BY classification, bill_code'
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/bill-codes/summary', async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT classification, COUNT(*) as code_count,
+             ROUND(COALESCE(SUM(avg_monthly_amount),0)::numeric, 2) as monthly_total
+      FROM bill_code_classifications
+      GROUP BY classification ORDER BY monthly_total DESC
+    `);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/admin/bill-codes/:billCode', async (req, res) => {
+  try {
+    const { billCode } = req.params;
+    const { classification, revenue_bucket } = req.body;
+
+    const validClassifications = ['revenue', 'fee_income', 'pass_through', 'excluded', 'unclassified'];
+    if (!validClassifications.includes(classification)) {
+      return res.status(400).json({ error: 'Invalid classification' });
+    }
+    const validBuckets = ['title', 'escrow', 'tsg', 'underwriter', 'fee', null];
+    if (revenue_bucket !== undefined && !validBuckets.includes(revenue_bucket)) {
+      return res.status(400).json({ error: 'Invalid revenue bucket' });
+    }
+
+    const { rows } = await pool.query(`
+      UPDATE bill_code_classifications
+      SET classification = $1, revenue_bucket = $2, updated_at = NOW()
+      WHERE bill_code = $3
+      RETURNING *
+    `, [classification, revenue_bucket || null, billCode]);
+
+    if (rows.length === 0) return res.status(404).json({ error: 'Bill code not found' });
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================
+// TRANSACTION DESK API
+// ============================================
+function getCurrentYearMonth() {
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function getPriorMonth(yearMonth) {
+  const [y, m] = yearMonth.split('-').map(Number);
+  if (m === 1) return `${y - 1}-12`;
+  return `${y}-${String(m - 1).padStart(2, '0')}`;
+}
+
+function getMonthsAgo(yearMonth, n) {
+  let [y, m] = yearMonth.split('-').map(Number);
+  for (let i = 0; i < n; i++) { m--; if (m === 0) { m = 12; y--; } }
+  return `${y}-${String(m).padStart(2, '0')}`;
+}
+
+function getYesterdayPacific() {
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
+  now.setDate(now.getDate() - 1);
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
+
+function authenticateTD(req, res, next) {
+  const apiKey = req.headers['x-api-key'] || req.headers['authorization']?.replace('Bearer ', '');
+  if (!apiKey || apiKey !== process.env.TD_API_KEY) {
+    return res.status(401).json({ error: 'Unauthorized — invalid or missing API key' });
+  }
+  next();
+}
+
+const tdLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: { error: 'Too many requests — try again in 15 minutes' }
+});
+
+app.use('/api/td', tdLimiter, authenticateTD);
+
+app.get('/api/td/ping', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString(), service: 'PCT Management Reports' });
+});
+
+app.get('/api/td/rep/:repName', async (req, res) => {
+  try {
+    const repName = decodeURIComponent(req.params.repName);
+    const month = req.query.month || getCurrentYearMonth();
+    const priorMonth = getPriorMonth(month);
+    const yesterday = getYesterdayPacific();
+
+    const [mtdResult, ydayResult, openResult, ydayOpenResult, priorResult, ratioResult, workDayResult, rankResult, totalRepsResult] = await Promise.all([
+      pool.query(`
+        SELECT COUNT(*) as mtd_closed,
+               ROUND(COALESCE(SUM(total_revenue),0)::numeric, 2) as mtd_revenue,
+               COUNT(*) FILTER (WHERE category = 'Purchase') as mtd_purchase,
+               COUNT(*) FILTER (WHERE category = 'Refinance') as mtd_refi,
+               COUNT(*) FILTER (WHERE category = 'Escrow') as mtd_escrow,
+               COUNT(*) FILTER (WHERE category = 'TSG') as mtd_tsg,
+               ROUND(COALESCE(SUM(CASE WHEN category = 'Purchase' THEN total_revenue ELSE 0 END),0)::numeric, 2) as mtd_purchase_rev,
+               ROUND(COALESCE(SUM(CASE WHEN category = 'Refinance' THEN total_revenue ELSE 0 END),0)::numeric, 2) as mtd_refi_rev,
+               ROUND(COALESCE(SUM(CASE WHEN category = 'Escrow' THEN total_revenue ELSE 0 END),0)::numeric, 2) as mtd_escrow_rev,
+               ROUND(COALESCE(SUM(CASE WHEN category = 'TSG' THEN total_revenue ELSE 0 END),0)::numeric, 2) as mtd_tsg_rev
+        FROM order_summary WHERE sales_rep = $1 AND fetch_month = $2
+      `, [repName, month]),
+      pool.query(`
+        SELECT COUNT(*) as yesterday_closed,
+               ROUND(COALESCE(SUM(total_revenue),0)::numeric, 2) as yesterday_revenue
+        FROM order_summary WHERE sales_rep = $1 AND transaction_date = $2
+      `, [repName, yesterday]),
+      pool.query(`
+        SELECT COUNT(*) as mtd_opens FROM open_orders WHERE sales_rep = $1 AND open_month = $2
+      `, [repName, month]),
+      pool.query(`
+        SELECT COUNT(*) as yesterday_opens FROM open_orders WHERE sales_rep = $1 AND received_date = $2
+      `, [repName, yesterday]),
+      pool.query(`
+        SELECT COUNT(*) as prior_closed, ROUND(COALESCE(SUM(total_revenue),0)::numeric, 2) as prior_revenue
+        FROM order_summary WHERE sales_rep = $1 AND fetch_month = $2
+      `, [repName, priorMonth]),
+      pool.query(`
+        SELECT
+          (SELECT COUNT(*) FROM open_orders WHERE sales_rep = $1 AND open_month >= $2 AND open_month <= $3) as created_4m,
+          (SELECT COUNT(*) FROM order_summary WHERE sales_rep = $1 AND fetch_month >= $2 AND fetch_month <= $3) as closed_4m
+      `, [repName, getMonthsAgo(month, 4), month]),
+      pool.query(`
+        SELECT COUNT(*) FILTER (WHERE d <= $2::date) as worked, COUNT(*) as total
+        FROM generate_series($1::date, (date_trunc('month', $1::date) + interval '1 month - 1 day')::date, '1 day') d
+        WHERE EXTRACT(DOW FROM d) NOT IN (0, 6)
+      `, [`${month}-01`, yesterday]),
+      pool.query(`
+        SELECT COUNT(*) + 1 as rank FROM (
+          SELECT sales_rep, SUM(total_revenue) as rev FROM order_summary
+          WHERE fetch_month = $1 AND sales_rep IS NOT NULL AND sales_rep != ''
+          GROUP BY sales_rep
+          HAVING SUM(total_revenue) > (SELECT COALESCE(SUM(total_revenue), 0) FROM order_summary WHERE sales_rep = $2 AND fetch_month = $1)
+        ) ranked
+      `, [month, repName]),
+      pool.query(`
+        SELECT COUNT(DISTINCT sales_rep) as total FROM order_summary
+        WHERE fetch_month = $1 AND sales_rep IS NOT NULL AND sales_rep != ''
+      `, [month])
+    ]);
+
+    const mtd = mtdResult.rows[0];
+    const yday = ydayResult.rows[0];
+    const ratio = ratioResult.rows[0];
+    const wd = workDayResult.rows[0];
+    const mtdRev = parseFloat(mtd.mtd_revenue) || 0;
+    const worked = parseInt(wd.worked);
+    const totalWd = parseInt(wd.total);
+    const created = parseInt(ratio.created_4m) || 0;
+    const closed = parseInt(ratio.closed_4m) || 0;
+
+    res.json({
+      rep: repName,
+      month,
+      yesterday: {
+        date: yesterday,
+        closed: parseInt(yday.yesterday_closed) || 0,
+        revenue: parseFloat(yday.yesterday_revenue) || 0,
+        opens: parseInt(ydayOpenResult.rows[0].yesterday_opens) || 0
+      },
+      mtd: {
+        closed: parseInt(mtd.mtd_closed) || 0,
+        revenue: mtdRev,
+        opens: parseInt(openResult.rows[0].mtd_opens) || 0,
+        purchase: { count: parseInt(mtd.mtd_purchase), revenue: parseFloat(mtd.mtd_purchase_rev) },
+        refinance: { count: parseInt(mtd.mtd_refi), revenue: parseFloat(mtd.mtd_refi_rev) },
+        escrow: { count: parseInt(mtd.mtd_escrow), revenue: parseFloat(mtd.mtd_escrow_rev) },
+        tsg: { count: parseInt(mtd.mtd_tsg), revenue: parseFloat(mtd.mtd_tsg_rev) }
+      },
+      prior: {
+        month: priorMonth,
+        closed: parseInt(priorResult.rows[0].prior_closed) || 0,
+        revenue: parseFloat(priorResult.rows[0].prior_revenue) || 0
+      },
+      projected: worked > 0 ? parseFloat(((mtdRev / worked) * totalWd).toFixed(2)) : 0,
+      closingRatio: {
+        created,
+        closed,
+        ratio: created > 0 ? parseFloat(((closed / created) * 100).toFixed(1)) : null,
+        window: `${getMonthsAgo(month, 4)} to ${month}`
+      },
+      ranking: {
+        position: parseInt(rankResult.rows[0].rank),
+        totalReps: parseInt(totalRepsResult.rows[0].total)
+      },
+      workingDays: { worked, total: totalWd, remaining: totalWd - worked }
+    });
+  } catch (err) {
+    console.error('TD rep API error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/td/leaderboard', async (req, res) => {
+  try {
+    const month = req.query.month || getCurrentYearMonth();
+    const limit = Math.min(parseInt(req.query.limit) || 20, 50);
+    const priorMonth = getPriorMonth(month);
+
+    const [mainResult, openResult, priorResult] = await Promise.all([
+      pool.query(`
+        SELECT os.sales_rep, COUNT(*) as mtd_closed,
+               ROUND(SUM(os.total_revenue)::numeric, 2) as mtd_revenue,
+               COUNT(*) FILTER (WHERE os.category = 'Purchase') as purchase_cnt,
+               COUNT(*) FILTER (WHERE os.category = 'Refinance') as refi_cnt,
+               COUNT(*) FILTER (WHERE os.category = 'Escrow') as escrow_cnt,
+               COUNT(*) FILTER (WHERE os.category = 'TSG') as tsg_cnt
+        FROM order_summary os
+        WHERE os.fetch_month = $1 AND os.sales_rep IS NOT NULL AND os.sales_rep != ''
+        GROUP BY os.sales_rep ORDER BY mtd_revenue DESC LIMIT $2
+      `, [month, limit]),
+      pool.query(`
+        SELECT sales_rep, COUNT(*) as mtd_opens FROM open_orders
+        WHERE open_month = $1 AND sales_rep IS NOT NULL AND sales_rep != ''
+        GROUP BY sales_rep
+      `, [month]),
+      pool.query(`
+        SELECT sales_rep, ROUND(SUM(total_revenue)::numeric, 2) as prior_revenue
+        FROM order_summary
+        WHERE fetch_month = $1 AND sales_rep IS NOT NULL AND sales_rep != ''
+        GROUP BY sales_rep
+      `, [priorMonth])
+    ]);
+
+    const opensMap = {};
+    openResult.rows.forEach(r => { opensMap[r.sales_rep] = parseInt(r.mtd_opens); });
+    const priorMap = {};
+    priorResult.rows.forEach(r => { priorMap[r.sales_rep] = parseFloat(r.prior_revenue); });
+
+    const leaderboard = mainResult.rows.map((r, i) => ({
+      rank: i + 1,
+      salesRep: r.sales_rep,
+      mtdClosed: parseInt(r.mtd_closed),
+      mtdRevenue: parseFloat(r.mtd_revenue),
+      mtdOpens: opensMap[r.sales_rep] || 0,
+      priorRevenue: priorMap[r.sales_rep] || 0,
+      purchaseCount: parseInt(r.purchase_cnt),
+      refiCount: parseInt(r.refi_cnt),
+      escrowCount: parseInt(r.escrow_cnt),
+      tsgCount: parseInt(r.tsg_cnt)
+    }));
+
+    res.json({ month, priorMonth, totalReps: mainResult.rows.length, leaderboard });
+  } catch (err) {
+    console.error('TD leaderboard API error:', err);
     res.status(500).json({ error: err.message });
   }
 });

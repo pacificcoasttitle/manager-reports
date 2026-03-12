@@ -17,6 +17,7 @@ import TessaChat from '../components/TessaChat';
 import SettingsPage from '../components/SettingsPage';
 import ReconciliationBar from '../components/ReconciliationBar';
 import DataExplorer from '../components/DataExplorer';
+import BillCodeManager from '../components/BillCodeManager';
 
 const NAV_ITEMS = [
   { id: 'daily-revenue', label: 'Title Revenue', iconKey: 'chart', endpoint: '/api/reports/daily-revenue', section: 'reports' },
@@ -29,6 +30,7 @@ const NAV_ITEMS = [
   { id: 'tessa', label: 'Ask Tessa', iconKey: 'tessa', endpoint: null, section: 'ai' },
   { id: 'data', label: 'Data Manager', iconKey: 'database', endpoint: null, section: 'admin' },
   { id: 'explorer', label: 'Live Data', iconKey: 'table', endpoint: null, section: 'admin' },
+  { id: 'bill-codes', label: 'Bill Codes', iconKey: 'tag', endpoint: null, section: 'admin' },
   { id: 'settings', label: 'Settings', iconKey: 'settings', endpoint: null, section: 'admin' },
 ];
 
@@ -47,6 +49,7 @@ function NavIcon({ name, active, tessa }) {
     discrepancies: <svg {...props}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>,
     tessa: <svg {...props} strokeWidth={1.6}><circle cx="12" cy="12" r="3" /><path d="M12 2v2" /><path d="M12 20v2" /><path d="M4.93 4.93l1.41 1.41" /><path d="M17.66 17.66l1.41 1.41" /><path d="M2 12h2" /><path d="M20 12h2" /><path d="M4.93 19.07l1.41-1.41" /><path d="M17.66 6.34l1.41-1.41" /></svg>,
     table: <svg {...props}><rect x="3" y="3" width="18" height="18" rx="2" /><line x1="3" y1="9" x2="21" y2="9" /><line x1="3" y1="15" x2="21" y2="15" /><line x1="9" y1="3" x2="9" y2="21" /><line x1="15" y1="3" x2="15" y2="21" /></svg>,
+    tag: <svg {...props}><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z" /><line x1="7" y1="7" x2="7.01" y2="7" /></svg>,
     database: <svg {...props}><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" /><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" /></svg>,
     settings: <svg {...props}><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" /></svg>,
     logout: <svg {...props}><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>,
@@ -240,6 +243,7 @@ export default function Home() {
             {activeTab === 'tessa' && <TessaChat month={month} year={year} />}
             {activeTab === 'data' && <FetchManager />}
             {activeTab === 'explorer' && <DataExplorer month={month} year={year} />}
+            {activeTab === 'bill-codes' && <BillCodeManager />}
             {activeTab === 'settings' && <SettingsPage showKPI={showKPI} onToggleKPI={toggleKPI} />}
           </div>
         )}
