@@ -978,6 +978,112 @@ app.get('/api/td/closings', async (req, res) => {
   }
 });
 
+app.get('/api/td/client-summary', async (req, res) => {
+  try {
+    const year = parseInt(req.query.year);
+    if (!year) return res.status(400).json({ error: 'year required' });
+    const repName = req.query.repName;
+
+    const yearStart = `${year}-01`;
+    const yearEnd = `${year}-12`;
+    const priorYearStart = `${year - 1}-01`;
+    const priorYearEnd = `${year - 1}-12`;
+
+    let clientQuery = `
+      SELECT
+        COALESCE(NULLIF(main_contact, ''), marketing_source, 'Unknown') as client_name,
+        COALESCE(NULLIF(marketing_source, ''), 'Unknown') as company_name,
+        COUNT(*) as deals,
+        ROUND(SUM(total_revenue)::numeric, 2) as revenue,
+        MAX(transaction_date)::text as last_close_date,
+        EXTRACT(MONTH FROM transaction_date)::int as close_month
+      FROM order_summary
+      WHERE fetch_month >= $1 AND fetch_month <= $2 AND total_revenue > 0
+    `;
+    let params = [yearStart, yearEnd];
+    let idx = 3;
+    if (repName) { clientQuery += ` AND sales_rep = $${idx}`; params.push(repName); idx++; }
+    clientQuery += ` GROUP BY client_name, company_name, close_month ORDER BY revenue DESC`;
+
+    const { rows: rawDeals } = await pool.query(clientQuery, params);
+
+    const clientMap = {};
+    for (const row of rawDeals) {
+      const key = `${row.client_name}|||${row.company_name}`;
+      if (!clientMap[key]) {
+        clientMap[key] = {
+          clientName: row.client_name, companyName: row.company_name,
+          deals: 0, revenue: 0, lastCloseDate: row.last_close_date,
+          monthlyDeals: [0,0,0,0,0,0,0,0,0,0,0,0]
+        };
+      }
+      const c = clientMap[key];
+      c.deals += parseInt(row.deals);
+      c.revenue += parseFloat(row.revenue);
+      if (row.last_close_date > c.lastCloseDate) c.lastCloseDate = row.last_close_date;
+      c.monthlyDeals[parseInt(row.close_month) - 1] += parseInt(row.deals);
+    }
+
+    let firstDealQuery = `
+      SELECT COALESCE(NULLIF(main_contact, ''), marketing_source, 'Unknown') as client_name,
+             COALESCE(NULLIF(marketing_source, ''), 'Unknown') as company_name,
+             MIN(transaction_date)::text as first_deal_date
+      FROM order_summary WHERE total_revenue > 0
+    `;
+    let firstParams = [];
+    let fi = 1;
+    if (repName) { firstDealQuery += ` AND sales_rep = $${fi}`; firstParams.push(repName); fi++; }
+    firstDealQuery += ` GROUP BY client_name, company_name`;
+    const { rows: firstDeals } = await pool.query(firstDealQuery, firstParams);
+    const firstDealMap = {};
+    firstDeals.forEach(r => { firstDealMap[`${r.client_name}|||${r.company_name}`] = r.first_deal_date; });
+
+    let priorQuery = `
+      SELECT DISTINCT COALESCE(NULLIF(main_contact, ''), marketing_source, 'Unknown') as client_name,
+             COALESCE(NULLIF(marketing_source, ''), 'Unknown') as company_name
+      FROM order_summary WHERE fetch_month >= $1 AND fetch_month <= $2 AND total_revenue > 0
+    `;
+    let priorParams = [priorYearStart, priorYearEnd];
+    if (repName) { priorQuery += ` AND sales_rep = $3`; priorParams.push(repName); }
+    const { rows: priorClients } = await pool.query(priorQuery, priorParams);
+    const priorSet = new Set(priorClients.map(r => `${r.client_name}|||${r.company_name}`));
+
+    const clients = Object.entries(clientMap)
+      .map(([key, data]) => {
+        const firstDealDate = firstDealMap[key] || null;
+        return {
+          clientName: data.clientName, companyName: data.companyName,
+          deals: data.deals, revenue: data.revenue,
+          lastCloseDate: data.lastCloseDate, firstDealDate,
+          isNewThisYear: firstDealDate ? firstDealDate.startsWith(String(year)) : false,
+          isRepeat: priorSet.has(key),
+          monthlyDeals: data.monthlyDeals
+        };
+      })
+      .sort((a, b) => b.revenue - a.revenue);
+
+    const totalClients = clients.length;
+    const totalRevenue = clients.reduce((s, c) => s + c.revenue, 0);
+    const totalDeals = clients.reduce((s, c) => s + c.deals, 0);
+
+    res.json({
+      year, repName: repName || 'All Reps',
+      totals: {
+        totalClients,
+        repeatClients: clients.filter(c => c.isRepeat).length,
+        newClients: clients.filter(c => c.isNewThisYear).length,
+        topClientRevenue: clients.length > 0 ? clients[0].revenue : 0,
+        avgDealsPerClient: totalClients > 0 ? Math.round((totalDeals / totalClients) * 10) / 10 : 0,
+        totalRevenue, totalDeals
+      },
+      clients
+    });
+  } catch (err) {
+    console.error('TD client-summary error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ============================================
 // DISCREPANCIES
 // ============================================

@@ -236,6 +236,59 @@ GET /api/td/closings?month=2&year=2026&repName=Team%20Meza
 
 ---
 
+### `GET /api/td/client-summary`
+Client/company-level deal aggregation for a year, with repeat/new detection and monthly sparkline data.
+
+**Parameters:**
+| Param    | Type   | Required | Description                            |
+|----------|--------|----------|----------------------------------------|
+| year     | query  | Yes      | 4-digit year (e.g. 2026)               |
+| repName  | query  | No       | Sales rep name. Omit for company-wide  |
+
+**Example:**
+```
+GET /api/td/client-summary?year=2026&repName=Team%20Meza
+```
+
+**Response:**
+```json
+{
+  "year": 2026,
+  "repName": "Team Meza",
+  "totals": {
+    "totalClients": 85,
+    "repeatClients": 32,
+    "newClients": 53,
+    "topClientRevenue": 18500.00,
+    "avgDealsPerClient": 2.3,
+    "totalRevenue": 425000.00,
+    "totalDeals": 196
+  },
+  "clients": [
+    {
+      "clientName": "Paul Sepulveda",
+      "companyName": "The Escrow Forum",
+      "deals": 20,
+      "revenue": 18500.00,
+      "lastCloseDate": "2026-02-25",
+      "firstDealDate": "2025-03-12",
+      "isNewThisYear": false,
+      "isRepeat": true,
+      "monthlyDeals": [8, 12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    }
+  ]
+}
+```
+
+**Notes:**
+- Clients are grouped by `main_contact` (ordering person) + `marketing_source` (company).
+- `isNewThisYear` = first-ever deal with PCT started in the requested year.
+- `isRepeat` = client also had deals in the prior year.
+- `monthlyDeals` is a 12-element array (Jan–Dec) for sparkline charts.
+- Sorted by revenue descending.
+
+---
+
 ## Data Notes
 
 - All monetary values are in USD, rounded to 2 decimal places.
@@ -277,6 +330,11 @@ const prod = await fetch(`${API_BASE}/api/td/production-history?year=2026&repNam
 
 // Closings for a rep in a specific month
 const closings = await fetch(`${API_BASE}/api/td/closings?month=2&year=2026&repName=Team%20Meza`, {
+  headers: { 'x-api-key': API_KEY }
+});
+
+// Client summary — repeat/new clients with deal history
+const clients = await fetch(`${API_BASE}/api/td/client-summary?year=2026&repName=Team%20Meza`, {
   headers: { 'x-api-key': API_KEY }
 });
 ```
