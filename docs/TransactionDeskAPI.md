@@ -135,6 +135,107 @@ GET /api/td/leaderboard?month=2026-02&limit=10
 
 ---
 
+### `GET /api/td/trends`
+Monthly openings, closings, and revenue for current year + prior year.
+
+**Parameters:**
+| Param    | Type   | Required | Description                            |
+|----------|--------|----------|----------------------------------------|
+| repName  | query  | No       | Sales rep name. Omit for company-wide totals |
+
+**Example:**
+```
+GET /api/td/trends?repName=Kevin%20Green
+```
+
+**Response:**
+```json
+{
+  "currentYear": {
+    "year": 2026,
+    "months": [
+      { "month": 1, "monthName": "January", "openings": 85, "closings": 62, "revenue": 98500.00 },
+      { "month": 2, "monthName": "February", "openings": 90, "closings": 68, "revenue": 112000.00 }
+    ]
+  },
+  "priorYear": {
+    "year": 2025,
+    "months": [
+      { "month": 1, "monthName": "January", "openings": 78, "closings": 55, "revenue": 85000.00 }
+    ]
+  }
+}
+```
+
+---
+
+### `GET /api/td/production-history`
+Monthly production with closing ratios for a specific year.
+
+**Parameters:**
+| Param    | Type   | Required | Description                            |
+|----------|--------|----------|----------------------------------------|
+| year     | query  | Yes      | 4-digit year (e.g. 2026)               |
+| repName  | query  | No       | Sales rep name. Omit for company-wide  |
+
+**Example:**
+```
+GET /api/td/production-history?year=2026&repName=Kevin%20Green
+```
+
+**Response:**
+```json
+{
+  "year": 2026,
+  "repName": "Kevin Green",
+  "months": [
+    { "month": 1, "monthName": "January", "openings": 12, "closings": 9, "revenue": 15000.00, "closingRatio": 75 },
+    { "month": 2, "monthName": "February", "openings": 15, "closings": 11, "revenue": 18500.00, "closingRatio": 73 }
+  ]
+}
+```
+
+---
+
+### `GET /api/td/closings`
+Individual closed orders with file number, address, date, and revenue.
+
+**Parameters:**
+| Param    | Type   | Required | Description                            |
+|----------|--------|----------|----------------------------------------|
+| month    | query  | No       | Month number (1-12). Default: current month |
+| year     | query  | No       | 4-digit year. Default: current year     |
+| repName  | query  | No       | Sales rep name. Omit for all reps       |
+
+**Example:**
+```
+GET /api/td/closings?month=2&year=2026&repName=Team%20Meza
+```
+
+**Response:**
+```json
+{
+  "month": 2,
+  "year": 2026,
+  "repName": "Team Meza",
+  "totalClosings": 45,
+  "totalRevenue": 82500.00,
+  "closings": [
+    {
+      "fileNumber": "20013657-GLT",
+      "address": "123 Main St, Glendale CA 91201",
+      "closedDate": "2026-02-28",
+      "revenue": 609.00,
+      "category": "Purchase",
+      "salesRep": "Team Meza",
+      "titleOfficer": "Eddie LasM..."
+    }
+  ]
+}
+```
+
+---
+
 ## Data Notes
 
 - All monetary values are in USD, rounded to 2 decimal places.
@@ -163,6 +264,21 @@ const board = await fetch(`${API_BASE}/api/td/leaderboard?month=2026-02`, {
   headers: { 'x-api-key': API_KEY }
 });
 const rankings = await board.json();
+
+// Trends (company-wide)
+const trends = await fetch(`${API_BASE}/api/td/trends`, {
+  headers: { 'x-api-key': API_KEY }
+});
+
+// Production history for a rep
+const prod = await fetch(`${API_BASE}/api/td/production-history?year=2026&repName=Kevin%20Green`, {
+  headers: { 'x-api-key': API_KEY }
+});
+
+// Closings for a rep in a specific month
+const closings = await fetch(`${API_BASE}/api/td/closings?month=2&year=2026&repName=Team%20Meza`, {
+  headers: { 'x-api-key': API_KEY }
+});
 ```
 
 ---

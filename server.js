@@ -835,6 +835,149 @@ app.get('/api/td/leaderboard', async (req, res) => {
   }
 });
 
+const TD_MONTH_NAMES = ['','January','February','March','April','May','June',
+  'July','August','September','October','November','December'];
+
+app.get('/api/td/trends', async (req, res) => {
+  try {
+    const repName = req.query.repName;
+    const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
+    const currentYear = now.getFullYear();
+    const priorYear = currentYear - 1;
+
+    async function getYearData(year) {
+      let cq = `SELECT EXTRACT(MONTH FROM transaction_date)::int as month, COUNT(*) as closings,
+                        ROUND(SUM(total_revenue)::numeric, 2) as revenue
+                 FROM order_summary WHERE EXTRACT(YEAR FROM transaction_date) = $1`;
+      let cp = [year];
+      let oq = `SELECT EXTRACT(MONTH FROM received_date)::int as month, COUNT(*) as openings
+                 FROM open_orders WHERE EXTRACT(YEAR FROM received_date) = $1`;
+      let op = [year];
+
+      if (repName) {
+        cq += ` AND sales_rep = $2`; cp.push(repName);
+        oq += ` AND sales_rep = $2`; op.push(repName);
+      }
+      cq += ` GROUP BY month ORDER BY month`;
+      oq += ` GROUP BY month ORDER BY month`;
+
+      const [{ rows: cRows }, { rows: oRows }] = await Promise.all([
+        pool.query(cq, cp), pool.query(oq, op)
+      ]);
+
+      const openMap = {}; oRows.forEach(r => { openMap[r.month] = parseInt(r.openings); });
+      const closeMap = {}; cRows.forEach(r => { closeMap[r.month] = { closings: parseInt(r.closings), revenue: parseFloat(r.revenue) }; });
+      const allM = new Set([...oRows.map(r => r.month), ...cRows.map(r => r.month)]);
+
+      return [...allM].sort((a, b) => a - b).map(m => ({
+        month: m, monthName: TD_MONTH_NAMES[m],
+        openings: openMap[m] || 0,
+        closings: closeMap[m]?.closings || 0,
+        revenue: closeMap[m]?.revenue || 0
+      }));
+    }
+
+    const [currentYearData, priorYearData] = await Promise.all([
+      getYearData(currentYear), getYearData(priorYear)
+    ]);
+
+    res.json({
+      currentYear: { year: currentYear, months: currentYearData },
+      priorYear: { year: priorYear, months: priorYearData }
+    });
+  } catch (err) {
+    console.error('TD trends error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/td/production-history', async (req, res) => {
+  try {
+    const year = parseInt(req.query.year);
+    if (!year) return res.status(400).json({ error: 'year required' });
+    const repName = req.query.repName;
+
+    let cq = `SELECT EXTRACT(MONTH FROM transaction_date)::int as month, COUNT(*) as closings,
+                      ROUND(SUM(total_revenue)::numeric, 2) as revenue
+               FROM order_summary WHERE EXTRACT(YEAR FROM transaction_date) = $1`;
+    let cp = [year];
+    let oq = `SELECT EXTRACT(MONTH FROM received_date)::int as month, COUNT(*) as openings
+               FROM open_orders WHERE EXTRACT(YEAR FROM received_date) = $1`;
+    let op = [year];
+
+    if (repName) {
+      cq += ` AND sales_rep = $2`; cp.push(repName);
+      oq += ` AND sales_rep = $2`; op.push(repName);
+    }
+    cq += ` GROUP BY month ORDER BY month`;
+    oq += ` GROUP BY month ORDER BY month`;
+
+    const [{ rows: cRows }, { rows: oRows }] = await Promise.all([
+      pool.query(cq, cp), pool.query(oq, op)
+    ]);
+
+    const openMap = {}; oRows.forEach(r => { openMap[r.month] = parseInt(r.openings); });
+    const closeMap = {}; cRows.forEach(r => { closeMap[r.month] = { closings: parseInt(r.closings), revenue: parseFloat(r.revenue) }; });
+    const allM = new Set([...oRows.map(r => r.month), ...cRows.map(r => r.month)]);
+
+    const months = [...allM].sort((a, b) => a - b).map(m => {
+      const openings = openMap[m] || 0;
+      const closings = closeMap[m]?.closings || 0;
+      return {
+        month: m, monthName: TD_MONTH_NAMES[m],
+        openings, closings,
+        revenue: closeMap[m]?.revenue || 0,
+        closingRatio: openings > 0 ? Math.round((closings / openings) * 100) : 0
+      };
+    });
+
+    res.json({ year, repName: repName || 'All Reps', months });
+  } catch (err) {
+    console.error('TD production-history error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/td/closings', async (req, res) => {
+  try {
+    const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
+    const month = parseInt(req.query.month) || (now.getMonth() + 1);
+    const year = parseInt(req.query.year) || now.getFullYear();
+    const repName = req.query.repName;
+    const yearMonth = `${year}-${String(month).padStart(2, '0')}`;
+
+    let query = `SELECT file_number, COALESCE(full_address, '') as full_address, transaction_date,
+                        ROUND(total_revenue::numeric, 2) as revenue, category, sales_rep, title_officer
+                 FROM order_summary WHERE fetch_month = $1`;
+    let params = [yearMonth];
+
+    if (repName) { query += ` AND sales_rep = $2`; params.push(repName); }
+    query += ` ORDER BY transaction_date DESC`;
+
+    const { rows } = await pool.query(query, params);
+
+    const closings = rows.map(r => ({
+      fileNumber: r.file_number,
+      address: r.full_address,
+      closedDate: r.transaction_date,
+      revenue: parseFloat(r.revenue),
+      category: r.category,
+      salesRep: r.sales_rep,
+      titleOfficer: r.title_officer
+    }));
+
+    res.json({
+      month, year, repName: repName || 'All Reps',
+      totalClosings: closings.length,
+      totalRevenue: closings.reduce((sum, c) => sum + c.revenue, 0),
+      closings
+    });
+  } catch (err) {
+    console.error('TD closings error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ============================================
 // DISCREPANCIES
 // ============================================
