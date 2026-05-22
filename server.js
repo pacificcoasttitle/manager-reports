@@ -166,6 +166,18 @@ app.get('/api/reports/escrow-production', async (req, res) => {
   }
 });
 
+// Report 5b: Escrow Officer Production (same data as 5, grouped by escrow_officer)
+app.get('/api/reports/escrow-officer-production', async (req, res) => {
+  try {
+    const month = parseInt(req.query.month) || new Date().getMonth() + 1;
+    const year = parseInt(req.query.year) || new Date().getFullYear();
+    const data = await reports.escrowOfficerProduction(month, year);
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Report 6: TSG Production
 app.get('/api/reports/tsg-production', async (req, res) => {
   try {

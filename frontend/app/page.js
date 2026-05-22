@@ -10,6 +10,7 @@ import R14BranchesReport from '../components/R14BranchesReport';
 import R14RankingReport from '../components/R14RankingReport';
 import TitleOfficerReport from '../components/TitleOfficerReport';
 import EscrowProductionReport from '../components/EscrowProductionReport';
+import EscrowOfficerReport from '../components/EscrowOfficerReport';
 import TSGProductionReport from '../components/TSGProductionReport';
 import DiscrepanciesReport from '../components/DiscrepanciesReport';
 import FetchManager from '../components/FetchManager';
@@ -66,6 +67,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [showKPI, setShowKPI] = useState(true);
+  const [escrowSubTab, setEscrowSubTab] = useState('reps');
 
   useEffect(() => {
     setAuthed(isAuthenticated());
@@ -237,7 +239,26 @@ export default function Home() {
             {activeTab === 'r14-branches' && <R14BranchesReport data={data} />}
             {activeTab === 'r14-ranking' && <R14RankingReport data={data} />}
             {activeTab === 'title-officer' && <TitleOfficerReport data={data} />}
-            {activeTab === 'escrow' && <EscrowProductionReport data={data} />}
+            {activeTab === 'escrow' && (
+              <div>
+                <div className="sub-tab-bar">
+                  <button
+                    className={escrowSubTab === 'reps' ? 'active' : ''}
+                    onClick={() => setEscrowSubTab('reps')}
+                  >
+                    By Sales Rep
+                  </button>
+                  <button
+                    className={escrowSubTab === 'officers' ? 'active' : ''}
+                    onClick={() => setEscrowSubTab('officers')}
+                  >
+                    By Escrow Officer
+                  </button>
+                </div>
+                {escrowSubTab === 'reps' && <EscrowProductionReport data={data} />}
+                {escrowSubTab === 'officers' && <EscrowOfficerReport month={month} year={year} />}
+              </div>
+            )}
             {activeTab === 'tsg' && <TSGProductionReport data={data} />}
             {activeTab === 'discrepancies' && <DiscrepanciesReport month={month} year={year} />}
             {activeTab === 'tessa' && <TessaChat month={month} year={year} />}
