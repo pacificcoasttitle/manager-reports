@@ -17,8 +17,10 @@ export default function ReconciliationBar({ month, year }) {
 
   if (error || !data) return null;
 
-  const { dailyRevenueTotal, escrowTotal, grandTotal, rankingTotal,
-          titleOrders, escrowOrders, totalOrders, reconciled, rankingMatch } = data;
+  const { titleOfficerTotal, dailyRevenueTotal, escrowTotal, tsgTotal, grandTotal, rankingTotal,
+          titleOrders, escrowOrders, tsgOrders, totalOrders, reconciled, rankingMatch } = data;
+  const titleRev = titleOfficerTotal ?? dailyRevenueTotal ?? 0;
+  const tsg = tsgTotal ?? 0;
 
   const ok = reconciled && rankingMatch;
   const bg = ok ? '#f0fdf4' : '#fef2f2';
@@ -44,10 +46,12 @@ export default function ReconciliationBar({ month, year }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, color: iconColor }}>
         <span style={{ fontSize: '14px' }}>{icon}</span> {label}
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-        <Column label="Title Business" value={formatCurrency(dailyRevenueTotal)} sub={`${titleOrders} orders`} />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', flexWrap: 'wrap' }}>
+        <Column label="Title Officer Revenue" value={formatCurrency(titleRev)} sub={`${titleOrders} orders`} />
         <Operator>+</Operator>
-        <Column label="Escrow Business" value={formatCurrency(escrowTotal)} sub={`${escrowOrders} orders`} />
+        <Column label="Escrow Revenue" value={formatCurrency(escrowTotal)} sub={`${escrowOrders} orders`} />
+        <Operator>+</Operator>
+        <Column label="TSG Revenue" value={formatCurrency(tsg)} sub={`${tsgOrders ?? 0} orders`} />
         <Operator>=</Operator>
         <Column label="Grand Total" value={formatCurrency(grandTotal)} sub={`${totalOrders} orders`} accent />
         <Operator>=</Operator>
@@ -60,7 +64,7 @@ export default function ReconciliationBar({ month, year }) {
       </div>
       {!reconciled && (
         <div style={{ fontSize: '11px', color: '#dc2626', marginTop: '2px' }}>
-          ⚠️ Daily ({formatCurrency(dailyRevenueTotal)}) + Escrow ({formatCurrency(escrowTotal)}) = {formatCurrency(dailyRevenueTotal + escrowTotal)} but Grand Total = {formatCurrency(grandTotal)}. Difference: {formatCurrency(Math.abs((dailyRevenueTotal + escrowTotal) - grandTotal))}
+          ⚠️ Title Officer ({formatCurrency(titleRev)}) + Escrow ({formatCurrency(escrowTotal)}) + TSG ({formatCurrency(tsg)}) = {formatCurrency(titleRev + escrowTotal + tsg)} but Grand Total = {formatCurrency(grandTotal)}. Difference: {formatCurrency(Math.abs((titleRev + escrowTotal + tsg) - grandTotal))}
         </div>
       )}
     </div>

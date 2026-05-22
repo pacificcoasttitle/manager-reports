@@ -188,12 +188,14 @@ app.get('/api/reports/reconciliation', async (req, res) => {
   try {
     const { rows: dailyRevRows } = await pool.query(`
       SELECT 
-        ROUND(SUM(CASE WHEN category IN ('Purchase', 'Refinance', 'TSG') THEN total_revenue ELSE 0 END)::numeric, 2) as daily_revenue_total,
-        ROUND(SUM(CASE WHEN category = 'Escrow' THEN total_revenue ELSE 0 END)::numeric, 2) as escrow_total,
-        ROUND(SUM(total_revenue)::numeric, 2) as grand_total,
+        ROUND(SUM(COALESCE(title_revenue, 0) + COALESCE(underwriter_revenue, 0))::numeric, 2) as title_officer_total,
+        ROUND(SUM(COALESCE(escrow_revenue, 0))::numeric, 2) as escrow_total,
+        ROUND(SUM(COALESCE(tsg_revenue, 0))::numeric, 2) as tsg_total,
+        ROUND(SUM(COALESCE(total_revenue, 0))::numeric, 2) as grand_total,
         COUNT(*) as total_orders,
-        COUNT(*) FILTER (WHERE category IN ('Purchase', 'Refinance', 'TSG')) as title_orders,
-        COUNT(*) FILTER (WHERE category = 'Escrow') as escrow_orders
+        COUNT(*) FILTER (WHERE (COALESCE(title_revenue, 0) + COALESCE(underwriter_revenue, 0)) > 0) as title_officer_orders,
+        COUNT(*) FILTER (WHERE COALESCE(escrow_revenue, 0) > 0) as escrow_orders,
+        COUNT(*) FILTER (WHERE COALESCE(tsg_revenue, 0) > 0) as tsg_orders
       FROM order_summary
       WHERE fetch_month = $1
     `, [yearMonth]);
@@ -216,32 +218,37 @@ app.get('/api/reports/reconciliation', async (req, res) => {
       WHERE fetch_month = $1
     `, [yearMonth]);
     
-    const daily = parseFloat(dailyRevRows[0].daily_revenue_total) || 0;
+    const titleOfficer = parseFloat(dailyRevRows[0].title_officer_total) || 0;
     const escrow = parseFloat(dailyRevRows[0].escrow_total) || 0;
+    const tsg = parseFloat(dailyRevRows[0].tsg_total) || 0;
     const grand = parseFloat(dailyRevRows[0].grand_total) || 0;
     const ranking = parseFloat(rankingRows[0].ranking_total) || 0;
     
     const unassignedRevenue = grand - ranking;
     
-    const reconciled = Math.abs((daily + escrow) - grand) < 0.01;
+    const sumParts = titleOfficer + escrow + tsg;
+    const reconciled = Math.abs(sumParts - grand) < 0.01;
     const rankingMatch = Math.abs(ranking - grand) < 1.00;
     
     res.json({
-      dailyRevenueTotal: daily,
+      titleOfficerTotal: titleOfficer,
       escrowTotal: escrow,
+      tsgTotal: tsg,
+      dailyRevenueTotal: titleOfficer,
       grandTotal: grand,
       rankingTotal: ranking,
       unassignedRevenue: unassignedRevenue,
-      titleOrders: parseInt(dailyRevRows[0].title_orders),
+      titleOrders: parseInt(dailyRevRows[0].title_officer_orders),
       escrowOrders: parseInt(dailyRevRows[0].escrow_orders),
+      tsgOrders: parseInt(dailyRevRows[0].tsg_orders),
       totalOrders: parseInt(dailyRevRows[0].total_orders),
       breakdown: breakdownRows[0],
       reconciled: reconciled,
       rankingMatch: rankingMatch,
       checks: {
-        dailyPlusEscrow: reconciled ? '✓' : '✗',
+        titleEscrowTsg: reconciled ? '✓' : '✗',
         rankingMatchesTotal: rankingMatch ? '✓' : '✗',
-        formula: `Daily Revenue ($${daily.toLocaleString()}) + Escrow ($${escrow.toLocaleString()}) = $${(daily + escrow).toLocaleString()} vs Grand Total $${grand.toLocaleString()}`
+        formula: `Title Officer ($${titleOfficer.toLocaleString()}) + Escrow ($${escrow.toLocaleString()}) + TSG ($${tsg.toLocaleString()}) = $${sumParts.toLocaleString()} vs Grand Total $${grand.toLocaleString()}`
       }
     });
   } catch (err) {

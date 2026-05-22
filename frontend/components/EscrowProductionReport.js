@@ -18,7 +18,7 @@ export default function EscrowProductionReport({ data }) {
         <span><span className="label">Period:</span> {dates.selectedMonthLabel}</span>
         <span><span className="label">Today =</span> {dates.yesterday}</span>
         <span><span className="label">Prior:</span> {dates.priorMonthLabel}</span>
-        <span style={{ color: '#f26b2b', fontWeight: 600 }}>Title & Escrow orders only</span>
+        <span style={{ color: '#f26b2b', fontWeight: 600 }}>Escrow fee revenue only · any file with escrow_revenue (Title & Escrow + Escrow only)</span>
       </div>
 
       <div className="report-table-wrapper" style={{ overflowX: 'auto' }}>
