@@ -12,6 +12,7 @@ import TitleOfficerReport from '../components/TitleOfficerReport';
 import EscrowProductionReport from '../components/EscrowProductionReport';
 import EscrowOfficerReport from '../components/EscrowOfficerReport';
 import TSGProductionReport from '../components/TSGProductionReport';
+import OpeningsReport from '../components/OpeningsReport';
 import DiscrepanciesReport from '../components/DiscrepanciesReport';
 import FetchManager from '../components/FetchManager';
 import TessaChat from '../components/TessaChat';
@@ -34,6 +35,17 @@ const NAV_ITEMS = [
   { id: 'bill-codes', label: 'Bill Codes', iconKey: 'tag', endpoint: null, section: 'admin' },
   { id: 'settings', label: 'Settings', iconKey: 'settings', endpoint: null, section: 'admin' },
 ];
+
+// Report tabs that have a Closings/Openings sub-tab. Escrow handled separately (it
+// also has the By Sales Rep / By Escrow Officer split, so it needs two openings endpoints).
+const OPENINGS_ENDPOINTS = {
+  'daily-revenue': { endpoint: '/api/reports/daily-revenue/openings', entityLabel: 'Type' },
+  'r14-branches': { endpoint: '/api/reports/r14-branches/openings', entityLabel: 'Sales Rep' },
+  'r14-ranking': { endpoint: '/api/reports/r14-ranking/openings', entityLabel: 'Sales Rep' },
+  'title-officer': { endpoint: '/api/reports/title-officer/openings', entityLabel: 'Title Officer' },
+  'tsg': { endpoint: '/api/reports/tsg-production/openings', entityLabel: 'Sales Rep' },
+};
+const SUPPORTS_OPENINGS = new Set([...Object.keys(OPENINGS_ENDPOINTS), 'escrow']);
 
 function NavIcon({ name, active, tessa }) {
   const color = tessa ? (active ? '#f26b2b' : '#f26b2b') : (active ? '#f26b2b' : 'currentColor');
@@ -68,6 +80,7 @@ export default function Home() {
   const [error, setError] = useState(null);
   const [showKPI, setShowKPI] = useState(true);
   const [escrowSubTab, setEscrowSubTab] = useState('reps');
+  const [viewMode, setViewMode] = useState('closings'); // 'closings' | 'openings'
 
   useEffect(() => {
     setAuthed(isAuthenticated());
@@ -94,7 +107,10 @@ export default function Home() {
   const handleNav = (id) => {
     setData(null);
     setActiveTab(id);
+    setViewMode('closings');
   };
+
+  const isOpenings = viewMode === 'openings';
 
   const activeNav = NAV_ITEMS.find(n => n.id === activeTab);
   const isReportTab = activeNav?.section === 'reports';
@@ -218,8 +234,8 @@ export default function Home() {
           <KPICards data={data} dates={dates} activeTab={activeTab} />
         )}
 
-        {/* Reconciliation Bar (collapsed by default, below KPIs) */}
-        {isReportTab && !loading && (
+        {/* Reconciliation Bar (collapsed by default, below KPIs). Revenue-only — hidden on Openings views. */}
+        {isReportTab && !loading && !isOpenings && (
           <ReconciliationBar month={month} year={year} />
         )}
 
@@ -235,10 +251,44 @@ export default function Home() {
 
         {!loading && !error && (
           <div className="report-container">
-            {activeTab === 'daily-revenue' && <DailyRevenueReport data={data} />}
-            {activeTab === 'r14-branches' && <R14BranchesReport data={data} />}
-            {activeTab === 'r14-ranking' && <R14RankingReport data={data} />}
-            {activeTab === 'title-officer' && <TitleOfficerReport data={data} />}
+            {/* Closings / Openings sub-tab bar (revenue closed vs pipeline opened) */}
+            {SUPPORTS_OPENINGS.has(activeTab) && (
+              <div className="sub-tab-bar">
+                <button
+                  className={viewMode === 'closings' ? 'active' : ''}
+                  onClick={() => setViewMode('closings')}
+                >
+                  Closings
+                </button>
+                <button
+                  className={viewMode === 'openings' ? 'active' : ''}
+                  onClick={() => setViewMode('openings')}
+                >
+                  Openings
+                </button>
+              </div>
+            )}
+
+            {activeTab === 'daily-revenue' && (
+              isOpenings
+                ? <OpeningsReport endpoint={OPENINGS_ENDPOINTS['daily-revenue'].endpoint} entityLabel={OPENINGS_ENDPOINTS['daily-revenue'].entityLabel} month={month} year={year} />
+                : <DailyRevenueReport data={data} />
+            )}
+            {activeTab === 'r14-branches' && (
+              isOpenings
+                ? <OpeningsReport endpoint={OPENINGS_ENDPOINTS['r14-branches'].endpoint} entityLabel={OPENINGS_ENDPOINTS['r14-branches'].entityLabel} month={month} year={year} />
+                : <R14BranchesReport data={data} />
+            )}
+            {activeTab === 'r14-ranking' && (
+              isOpenings
+                ? <OpeningsReport endpoint={OPENINGS_ENDPOINTS['r14-ranking'].endpoint} entityLabel={OPENINGS_ENDPOINTS['r14-ranking'].entityLabel} month={month} year={year} />
+                : <R14RankingReport data={data} />
+            )}
+            {activeTab === 'title-officer' && (
+              isOpenings
+                ? <OpeningsReport endpoint={OPENINGS_ENDPOINTS['title-officer'].endpoint} entityLabel={OPENINGS_ENDPOINTS['title-officer'].entityLabel} month={month} year={year} />
+                : <TitleOfficerReport data={data} />
+            )}
             {activeTab === 'escrow' && (
               <div>
                 <div className="sub-tab-bar">
@@ -255,11 +305,23 @@ export default function Home() {
                     By Escrow Officer
                   </button>
                 </div>
-                {escrowSubTab === 'reps' && <EscrowProductionReport data={data} />}
-                {escrowSubTab === 'officers' && <EscrowOfficerReport month={month} year={year} />}
+                {escrowSubTab === 'reps' && (
+                  isOpenings
+                    ? <OpeningsReport endpoint="/api/reports/escrow-production/openings" entityLabel="Sales Rep" month={month} year={year} />
+                    : <EscrowProductionReport data={data} />
+                )}
+                {escrowSubTab === 'officers' && (
+                  isOpenings
+                    ? <OpeningsReport endpoint="/api/reports/escrow-officer-production/openings" entityLabel="Escrow Officer" month={month} year={year} />
+                    : <EscrowOfficerReport month={month} year={year} />
+                )}
               </div>
             )}
-            {activeTab === 'tsg' && <TSGProductionReport data={data} />}
+            {activeTab === 'tsg' && (
+              isOpenings
+                ? <OpeningsReport endpoint={OPENINGS_ENDPOINTS['tsg'].endpoint} entityLabel={OPENINGS_ENDPOINTS['tsg'].entityLabel} month={month} year={year} />
+                : <TSGProductionReport data={data} />
+            )}
             {activeTab === 'discrepancies' && <DiscrepanciesReport month={month} year={year} />}
             {activeTab === 'tessa' && <TessaChat month={month} year={year} />}
             {activeTab === 'data' && <FetchManager />}

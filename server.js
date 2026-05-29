@@ -191,6 +191,32 @@ app.get('/api/reports/tsg-production', async (req, res) => {
 });
 
 // ============================================
+// OPENINGS SUB-TABS (pipeline — orders received, not closed)
+// Additive endpoints; do not affect existing closings reports.
+// ============================================
+const openingsRoutes = [
+  ['/api/reports/daily-revenue/openings', 'dailyRevenueOpenings'],
+  ['/api/reports/title-officer/openings', 'titleOfficerOpenings'],
+  ['/api/reports/escrow-production/openings', 'escrowProductionOpenings'],
+  ['/api/reports/escrow-officer-production/openings', 'escrowOfficerOpenings'],
+  ['/api/reports/tsg-production/openings', 'tsgProductionOpenings'],
+  ['/api/reports/r14-branches/openings', 'r14BranchesOpenings'],
+  ['/api/reports/r14-ranking/openings', 'r14RankingOpenings'],
+];
+for (const [route, fn] of openingsRoutes) {
+  app.get(route, async (req, res) => {
+    try {
+      const month = parseInt(req.query.month) || new Date().getMonth() + 1;
+      const year = parseInt(req.query.year) || new Date().getFullYear();
+      const data = await reports[fn](month, year);
+      res.json(data);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+}
+
+// ============================================
 // RECONCILIATION ENDPOINT
 // ============================================
 app.get('/api/reports/reconciliation', async (req, res) => {
