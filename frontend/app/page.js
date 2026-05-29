@@ -5,6 +5,7 @@ import { isAuthenticated, logout } from '../lib/auth';
 import { api, formatCurrency } from '../lib/api';
 import LoginPage from '../components/LoginPage';
 import MonthSelector from '../components/MonthSelector';
+import TrendsDashboard from '../components/TrendsDashboard';
 import DailyRevenueReport from '../components/DailyRevenueReport';
 import R14BranchesReport from '../components/R14BranchesReport';
 import R14RankingReport from '../components/R14RankingReport';
@@ -22,6 +23,7 @@ import DataExplorer from '../components/DataExplorer';
 import BillCodeManager from '../components/BillCodeManager';
 
 const NAV_ITEMS = [
+  { id: 'trends', label: 'Trends', iconKey: 'trends', endpoint: null, section: 'reports' },
   { id: 'daily-revenue', label: 'Title Revenue', iconKey: 'chart', endpoint: '/api/reports/daily-revenue', section: 'reports' },
   { id: 'r14-branches', label: 'R-14 Branches', iconKey: 'branches', endpoint: '/api/reports/r14-branches', section: 'reports' },
   { id: 'r14-ranking', label: 'R-14 Ranking', iconKey: 'ranking', endpoint: '/api/reports/r14-ranking', section: 'reports' },
@@ -53,6 +55,7 @@ function NavIcon({ name, active, tessa }) {
   const props = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: color, strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round' };
 
   const icons = {
+    trends: <svg {...props}><polyline points="3 17 9 11 13 15 21 7" /><polyline points="14 7 21 7 21 14" /></svg>,
     chart: <svg {...props}><path d="M3 3v18h18" /><path d="M7 16l4-8 4 4 5-9" /></svg>,
     branches: <svg {...props}><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>,
     ranking: <svg {...props}><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>,
@@ -72,7 +75,7 @@ function NavIcon({ name, active, tessa }) {
 
 export default function Home() {
   const [authed, setAuthed] = useState(false);
-  const [activeTab, setActiveTab] = useState('daily-revenue');
+  const [activeTab, setActiveTab] = useState('trends');
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [year, setYear] = useState(new Date().getFullYear());
   const [data, setData] = useState(null);
@@ -113,6 +116,7 @@ export default function Home() {
   const isOpenings = viewMode === 'openings';
 
   const activeNav = NAV_ITEMS.find(n => n.id === activeTab);
+  const isTrends = activeTab === 'trends';
   const isReportTab = activeNav?.section === 'reports';
   const isExplorer = activeTab === 'explorer';
   const dates = data?.dates;
@@ -212,7 +216,7 @@ export default function Home() {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            {isReportTab && (
+            {isReportTab && !isTrends && (
               <>
                 <button
                   onClick={toggleKPI}
@@ -230,12 +234,12 @@ export default function Home() {
         </div>
 
         {/* KPI Cards */}
-        {isReportTab && showKPI && data && !loading && (
+        {isReportTab && !isTrends && showKPI && data && !loading && (
           <KPICards data={data} dates={dates} activeTab={activeTab} />
         )}
 
-        {/* Reconciliation Bar (collapsed by default, below KPIs). Revenue-only — hidden on Openings views. */}
-        {isReportTab && !loading && !isOpenings && (
+        {/* Reconciliation Bar (collapsed by default, below KPIs). Revenue-only — hidden on Openings & Trends views. */}
+        {isReportTab && !loading && !isOpenings && !isTrends && (
           <ReconciliationBar month={month} year={year} />
         )}
 
@@ -251,6 +255,8 @@ export default function Home() {
 
         {!loading && !error && (
           <div className="report-container">
+            {activeTab === 'trends' && <TrendsDashboard />}
+
             {/* Closings / Openings sub-tab bar (revenue closed vs pipeline opened) */}
             {SUPPORTS_OPENINGS.has(activeTab) && (
               <div className="sub-tab-bar">

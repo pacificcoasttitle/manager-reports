@@ -118,6 +118,19 @@ app.get('/api/reports/daily-revenue', async (req, res) => {
   }
 });
 
+// Trends Dashboard: month-over-month revenue + open/closed order counts
+app.get('/api/reports/trends', async (req, res) => {
+  try {
+    const product = req.query.product || 'all';
+    const breakdown = req.query.breakdown || 'none';
+    const data = await reports.trends({ product, breakdown });
+    res.json(data);
+  } catch (err) {
+    console.error('Trends error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Report 2: R-14 Branches
 app.get('/api/reports/r14-branches', async (req, res) => {
   try {
