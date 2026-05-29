@@ -213,14 +213,14 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Reconciliation Bar */}
-        {isReportTab && !loading && (
-          <ReconciliationBar month={month} year={year} />
-        )}
-
         {/* KPI Cards */}
         {isReportTab && showKPI && data && !loading && (
           <KPICards data={data} dates={dates} activeTab={activeTab} />
+        )}
+
+        {/* Reconciliation Bar (collapsed by default, below KPIs) */}
+        {isReportTab && !loading && (
+          <ReconciliationBar month={month} year={year} />
         )}
 
         {/* Content */}

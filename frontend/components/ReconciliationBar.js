@@ -6,6 +6,7 @@ import { api, formatCurrency } from '../lib/api';
 export default function ReconciliationBar({ month, year }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
+  const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
     if (!month || !year) return;
@@ -15,6 +16,9 @@ export default function ReconciliationBar({ month, year }) {
       .catch(err => setError(err.message));
   }, [month, year]);
 
+  // Reset to collapsed whenever the month/year changes
+  useEffect(() => { setExpanded(false); }, [month, year]);
+
   if (error || !data) return null;
 
   const { titleOfficerTotal, dailyRevenueTotal, escrowTotal, tsgTotal, grandTotal, rankingTotal,
@@ -23,28 +27,60 @@ export default function ReconciliationBar({ month, year }) {
   const tsg = tsgTotal ?? 0;
 
   const ok = reconciled && rankingMatch;
+  const icon = ok ? '✓' : '✗';
+  const label = ok ? 'Numbers Reconciled' : 'Revenue Mismatch Detected';
+
+  if (!expanded) {
+    return (
+      <div
+        className={`reconciliation-collapsed ${ok ? '' : 'unreconciled'}`}
+        onClick={() => setExpanded(true)}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpanded(true); } }}
+        aria-expanded="false"
+      >
+        <span className="reconciliation-status">
+          <span className="reconciliation-icon">{icon}</span> {label}
+        </span>
+        <span className="reconciliation-summary">
+          {formatCurrency(grandTotal)} total · {totalOrders} orders
+        </span>
+        <span className="reconciliation-chevron">▼</span>
+      </div>
+    );
+  }
+
   const bg = ok ? '#f0fdf4' : '#fef2f2';
   const border = ok ? '#86efac' : '#fca5a5';
   const topBorder = ok ? '#22c55e' : '#ef4444';
-  const icon = ok ? '✓' : '✗';
   const iconColor = ok ? '#16a34a' : '#dc2626';
-  const label = ok ? 'Numbers Reconciled' : 'Revenue Mismatch Detected';
 
   return (
-    <div style={{
-      background: bg,
-      border: `1px solid ${border}`,
-      borderTop: `3px solid ${topBorder}`,
-      borderRadius: '10px',
-      padding: '16px 24px',
-      margin: '20px 24px 16px',
-      boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '6px'
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, color: iconColor }}>
-        <span style={{ fontSize: '14px' }}>{icon}</span> {label}
+    <div
+      onClick={() => setExpanded(false)}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpanded(false); } }}
+      aria-expanded="true"
+      style={{
+        background: bg,
+        border: `1px solid ${border}`,
+        borderTop: `3px solid ${topBorder}`,
+        borderRadius: '10px',
+        padding: '16px 24px',
+        margin: '12px 24px 16px',
+        boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '6px',
+        cursor: 'pointer',
+        userSelect: 'none'
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', fontSize: '12px', fontWeight: 600, color: iconColor }}>
+        <span><span style={{ fontSize: '14px' }}>{icon}</span> {label}</span>
+        <span style={{ fontSize: '11px', color: '#9ca3af', fontWeight: 500 }}>▲ click to collapse</span>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', flexWrap: 'wrap' }}>
         <Column label="Title Officer Revenue" value={formatCurrency(titleRev)} sub={`${titleOrders} orders`} />
