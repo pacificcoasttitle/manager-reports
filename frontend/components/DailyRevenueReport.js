@@ -2,7 +2,7 @@
 
 import { formatCurrency } from '../lib/api';
 
-const CATEGORIES = ['Purchase', 'Refinance', 'TSG'];
+const CATEGORIES = ['Purchase', 'Refinance'];
 
 export default function DailyRevenueReport({ data }) {
   if (!data || !data.report) return <p style={{ color: '#868e96', padding: '40px 0', textAlign: 'center' }}>No data available. Fetch this month first in Data Manager.</p>;
@@ -22,6 +22,7 @@ export default function DailyRevenueReport({ data }) {
         <span><span className="label">Period:</span> {dates.selectedMonthLabel}</span>
         <span><span className="label">Today =</span> {dates.yesterday}</span>
         <span><span className="label">Prior:</span> {dates.priorMonthLabel}</span>
+        <span style={{ color: '#f26b2b', fontWeight: 600 }}>Title + UW revenue only · Purchase / Refinance (TSG and Escrow have their own tabs)</span>
       </div>
 
       <div className="report-table-wrapper" style={{ overflowX: 'auto', width: '100%' }}>
