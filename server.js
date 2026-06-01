@@ -1501,6 +1501,99 @@ app.delete('/api/admin/assignments/:salesRep', async (req, res) => {
 });
 
 // ============================================
+// PER-REP DAILY EMAILS (Sales Reps)
+// ============================================
+const { buildRepEmailHtml, sendRepEmails, sendRepEmailsTest, sendRepEmailsSample } = require('./lib/rep-email');
+
+// Preview a rep's email HTML (no send)
+app.get('/api/email/rep-preview/:repName', async (req, res) => {
+  try {
+    const { html } = await buildRepEmailHtml(decodeURIComponent(req.params.repName));
+    res.set('Content-Type', 'text/html').send(html);
+  } catch (err) {
+    res.status(500).send('Error: ' + err.message);
+  }
+});
+
+// Send a 3-rep SAMPLE to one test address (avoids flooding the inbox with ~37 emails)
+app.post('/api/email/rep-emails/test-sample', async (req, res) => {
+  try {
+    const testEmail = req.body.email || 'ghernandez@pct.com';
+    const sampleReps = Array.isArray(req.body.reps) && req.body.reps.length ? req.body.reps : null;
+    const results = await sendRepEmailsSample(testEmail, sampleReps);
+    res.json({ success: true, sentTo: testEmail, count: results.length, results });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Send a FULL TEST batch — every active rep's email goes to one test address (~37 emails)
+app.post('/api/email/rep-emails/test', async (req, res) => {
+  try {
+    const testEmail = req.body.email || 'ghernandez@pct.com';
+    const results = await sendRepEmailsTest(testEmail);
+    res.json({ success: true, sentTo: testEmail, count: results.length, results });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Send LIVE to each rep (manual trigger; cron go-live gated separately)
+app.post('/api/email/rep-emails', async (req, res) => {
+  try {
+    const results = await sendRepEmails();
+    res.json({ success: true, results });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Rep email recipients for the Settings UI (from rep_manager_assignments)
+app.get('/api/admin/rep-emails', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT sales_rep, manager_name, email, is_active FROM rep_manager_assignments ORDER BY manager_name, sales_rep'
+    );
+    const { rows: flag } = await pool.query("SELECT value FROM app_settings WHERE key = 'rep_emails_enabled'");
+    res.json({ reps: rows, enabled: flag[0]?.value === 'true' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update a rep's email and/or active flag
+app.put('/api/admin/rep-emails/:salesRep', async (req, res) => {
+  try {
+    const salesRep = decodeURIComponent(req.params.salesRep);
+    const { email, is_active } = req.body;
+    await pool.query(
+      `UPDATE rep_manager_assignments
+       SET email = COALESCE($2, email), is_active = COALESCE($3, is_active)
+       WHERE sales_rep = $1`,
+      [salesRep, email ?? null, typeof is_active === 'boolean' ? is_active : null]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Master toggle for rep emails (rep_emails_enabled in app_settings)
+app.put('/api/admin/rep-emails-enabled', async (req, res) => {
+  try {
+    const enabled = req.body.enabled === true || req.body.enabled === 'true';
+    await pool.query(
+      `INSERT INTO app_settings (key, value) VALUES ('rep_emails_enabled', $1)
+       ON CONFLICT (key) DO UPDATE SET value = $1`,
+      [enabled ? 'true' : 'false']
+    );
+    res.json({ success: true, enabled });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================
 // NIGHTLY CRON: Automated Revenue + Open Orders Import
 // ============================================
 // Checks every minute. Only runs at the scheduled time if cron_enabled = true.

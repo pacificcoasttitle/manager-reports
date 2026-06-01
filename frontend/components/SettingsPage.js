@@ -40,6 +40,14 @@ export default function SettingsPage({ showKPI, onToggleKPI }) {
   const [assignRep, setAssignRep] = useState('');
   const [assignMgr, setAssignMgr] = useState('');
 
+  // Sales rep emails (per rep, from rep_manager_assignments)
+  const [repEmails, setRepEmails] = useState([]);
+  const [repEmailsEnabled, setRepEmailsEnabled] = useState(false);
+  const [repSaving, setRepSaving] = useState(null); // sales_rep being saved
+  const [repSampleSending, setRepSampleSending] = useState(false);
+  const [repFullSending, setRepFullSending] = useState(false);
+  const [repTestResult, setRepTestResult] = useState(null);
+
   useEffect(() => { loadSettings(); }, []);
 
   async function refreshManagers() {
@@ -49,6 +57,52 @@ export default function SettingsPage({ showKPI, onToggleKPI }) {
       setAssignments(data.assignments || []);
       setAvailableReps(data.availableReps || []);
     } catch (e) { console.error('Failed to load managers:', e); }
+  }
+
+  async function refreshRepEmails() {
+    try {
+      const data = await api('/api/admin/rep-emails');
+      setRepEmails(data.reps || []);
+      setRepEmailsEnabled(!!data.enabled);
+    } catch (e) { console.error('Failed to load rep emails:', e); }
+  }
+
+  async function saveRep(salesRep, patch) {
+    setRepSaving(salesRep);
+    setRepEmails(prev => prev.map(r => r.sales_rep === salesRep ? { ...r, ...patch } : r));
+    try {
+      await api(`/api/admin/rep-emails/${encodeURIComponent(salesRep)}`, {
+        method: 'PUT', body: JSON.stringify(patch)
+      });
+    } catch (e) { console.error('Failed to save rep:', e); }
+    finally { setRepSaving(null); }
+  }
+
+  async function handleSendRepSample() {
+    setRepSampleSending(true);
+    setRepTestResult(null);
+    try {
+      const result = await api('/api/email/rep-emails/test-sample', {
+        method: 'POST', body: JSON.stringify({ email: 'ghernandez@pct.com' })
+      });
+      setRepTestResult({ success: true, mode: 'sample', ...result });
+    } catch (e) {
+      setRepTestResult({ success: false, error: e.message });
+    } finally { setRepSampleSending(false); }
+  }
+
+  async function handleSendRepFull() {
+    if (!window.confirm('This sends EVERY active rep email (~37) to ghernandez@pct.com. Continue?')) return;
+    setRepFullSending(true);
+    setRepTestResult(null);
+    try {
+      const result = await api('/api/email/rep-emails/test', {
+        method: 'POST', body: JSON.stringify({ email: 'ghernandez@pct.com' })
+      });
+      setRepTestResult({ success: true, mode: 'full', ...result });
+    } catch (e) {
+      setRepTestResult({ success: false, error: e.message });
+    } finally { setRepFullSending(false); }
   }
 
   async function loadSettings() {
@@ -68,6 +122,7 @@ export default function SettingsPage({ showKPI, onToggleKPI }) {
       setOfficers(Array.isArray(list) ? list : []);
     } catch (e) { console.error('Failed to load officer recipients:', e); }
     await refreshManagers();
+    await refreshRepEmails();
     setLoading(false);
   }
 
@@ -595,6 +650,99 @@ export default function SettingsPage({ showKPI, onToggleKPI }) {
             {mgrTestResult.success
               ? `✓ Test batch sent to ${mgrTestResult.sentTo}: ${(mgrTestResult.results || []).filter(r => r.sent).length}/${(mgrTestResult.results || []).length} managers`
               : `Error: ${mgrTestResult.error}`}
+          </div>
+        )}
+      </div>
+
+      {/* ── Sales Rep Emails (per rep) ── */}
+      <div style={{ background: 'white', border: '1px solid #e9ecef', borderRadius: '8px', padding: '20px', marginBottom: '16px' }}>
+        <div style={{ marginBottom: '16px' }}>
+          <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#343a40', marginBottom: '4px' }}>Sales Rep Emails</h3>
+          <div style={{ fontSize: '12px', color: '#868e96' }}>
+            Each rep gets a daily email showing only their own production (all business) and their rank within their team. Emails come from the manager assignment list — reps with no email won't receive one.
+          </div>
+        </div>
+
+        {/* Master enable toggle */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '18px' }}>
+          <div
+            className={`toggle ${repEmailsEnabled ? 'on' : ''}`}
+            onClick={async () => {
+              const next = !repEmailsEnabled;
+              setRepEmailsEnabled(next);
+              try {
+                await api('/api/admin/rep-emails-enabled', { method: 'PUT', body: JSON.stringify({ enabled: next }) });
+              } catch (e) { console.error('Failed to toggle rep emails:', e); }
+            }}
+          >
+            <div className="toggle-knob" />
+          </div>
+          <span style={{ fontSize: '13px', color: '#495057', fontWeight: 500 }}>
+            Daily send {repEmailsEnabled ? 'enabled' : 'disabled'}
+          </span>
+        </div>
+
+        {/* Rep list — compact rows */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '420px', overflowY: 'auto' }}>
+          {repEmails.map(r => (
+            <div key={r.sales_rep} style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <div style={{ width: '170px', fontSize: '13px', color: '#343a40' }}>
+                {r.sales_rep}
+                <span style={{ fontSize: '10px', color: '#adb5bd', marginLeft: '6px' }}>{(r.manager_name || '').split(' ')[0]}</span>
+              </div>
+              <input
+                type="email"
+                defaultValue={r.email || ''}
+                placeholder="no email — won't receive"
+                onBlur={(e) => { const v = e.target.value.trim(); if (v !== (r.email || '')) saveRep(r.sales_rep, { email: v }); }}
+                style={{ ...inputStyle, flex: 1, minWidth: '180px' }}
+              />
+              <div
+                className={`toggle ${r.is_active ? 'on' : ''}`}
+                onClick={() => saveRep(r.sales_rep, { is_active: !r.is_active })}
+                title={r.is_active ? 'Active' : 'Inactive'}
+              >
+                <div className="toggle-knob" />
+              </div>
+              <a
+                href={`${API_BASE}/api/email/rep-preview/${encodeURIComponent(r.sales_rep)}`}
+                target="_blank" rel="noopener noreferrer"
+                style={{ fontSize: '12px', color: '#1971c2', textDecoration: 'none', whiteSpace: 'nowrap' }}
+              >
+                Preview ↗
+              </a>
+              {repSaving === r.sales_rep && (
+                <span style={{ fontSize: '11px', color: '#adb5bd' }}>Saving…</span>
+              )}
+            </div>
+          ))}
+          {repEmails.length === 0 && (
+            <div style={{ fontSize: '12px', color: '#adb5bd', fontStyle: 'italic' }}>No reps yet — assign reps to managers above.</div>
+          )}
+        </div>
+
+        {/* Test buttons */}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', paddingTop: '14px', borderTop: '1px solid #f1f3f5', marginTop: '14px' }}>
+          <button onClick={handleSendRepSample} disabled={repSampleSending} className="btn-accent">
+            {repSampleSending ? 'Sending…' : '✉ Send 3 Samples to Me'}
+          </button>
+          <button onClick={handleSendRepFull} disabled={repFullSending} className="btn-primary" style={{ padding: '8px 16px' }}>
+            {repFullSending ? 'Sending…' : 'Send All (~37) to Me'}
+          </button>
+          <span style={{ fontSize: '11px', color: '#adb5bd' }}>
+            Samples = Kevin Green, Angeline Wu, Sandra Millar. All goes to ghernandez@pct.com with a TEST banner — no rep receives anything.
+          </span>
+        </div>
+
+        {repTestResult && (
+          <div style={{
+            padding: '10px 14px', borderRadius: '6px', fontSize: '13px', marginTop: '10px',
+            background: repTestResult.success ? '#ecfdf5' : '#fef2f2',
+            color: repTestResult.success ? '#065f46' : '#991b1b'
+          }}>
+            {repTestResult.success
+              ? `✓ ${repTestResult.mode === 'sample' ? 'Sample' : 'Full test'} sent to ${repTestResult.sentTo}: ${(repTestResult.results || []).filter(r => r.sent).length}/${(repTestResult.results || []).length} reps`
+              : `Error: ${repTestResult.error}`}
           </div>
         )}
       </div>
