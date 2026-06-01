@@ -1472,6 +1472,45 @@ cron.schedule('* * * * *', async () => {
 console.log('Nightly import cron scheduled (checks every minute, runs at configured time)');
 
 // ============================================
+// OFFICER EMAILS CRON: 5:00 AM Pacific daily
+// ============================================
+// Separate from the 9 PM data import. By 5 AM, "yesterday's" closings have
+// already been imported by the prior night's 9 PM run, so the data is complete.
+// Gated by app_settings.officer_emails_enabled.
+cron.schedule('0 5 * * *', async () => {
+  console.log('=== OFFICER EMAILS (5AM) ===', new Date().toISOString());
+
+  const { rows } = await pool.query("SELECT value FROM app_settings WHERE key = 'officer_emails_enabled'");
+  if (rows[0]?.value !== 'true') {
+    console.log('Officer emails disabled — skipping');
+    return;
+  }
+
+  try {
+    const results = await sendOfficerEmails();
+    const sent = results.filter(r => r.sent).length;
+    console.log(`Officer emails sent: ${sent}/${results.length}`);
+    results.forEach(r => {
+      if (!r.sent) console.error(`  FAILED: ${r.officer} — ${r.error}`);
+    });
+    await pool.query(`
+      INSERT INTO import_log (import_type, records_imported, success, triggered_by)
+      VALUES ('officer_emails', $1, true, 'cron')
+    `, [sent]).catch(() => {});
+  } catch (err) {
+    console.error('Officer emails FAILED:', err.message);
+    await pool.query(`
+      INSERT INTO import_log (import_type, records_imported, success, error_message, triggered_by)
+      VALUES ('officer_emails', 0, false, $1, 'cron')
+    `, [err.message]).catch(() => {});
+  }
+}, {
+  timezone: 'America/Los_Angeles'
+});
+
+console.log('Officer emails scheduled: 5:00 AM Pacific daily');
+
+// ============================================
 // START SERVER
 // ============================================
 // Only listen when running locally (not on Vercel)

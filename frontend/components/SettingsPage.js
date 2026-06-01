@@ -22,6 +22,7 @@ export default function SettingsPage({ showKPI, onToggleKPI }) {
   // Officer emails (per-title-officer)
   const [officers, setOfficers] = useState([]);
   const [officerEmailsEnabled, setOfficerEmailsEnabled] = useState(false);
+  const [officerEmailsTime, setOfficerEmailsTime] = useState('05:00');
   const [officerSaving, setOfficerSaving] = useState(null); // officer_name being saved
   const [officerTestSending, setOfficerTestSending] = useState(false);
   const [officerTestResult, setOfficerTestResult] = useState(null);
@@ -37,6 +38,7 @@ export default function SettingsPage({ showKPI, onToggleKPI }) {
       );
       setEmailTime(settings.daily_email_time || '21:00');
       setOfficerEmailsEnabled(settings.officer_emails_enabled === 'true');
+      setOfficerEmailsTime(settings.officer_emails_time || '05:00');
     } catch (e) { console.error('Failed to load settings:', e); }
     try {
       const list = await api('/api/email/officer-recipients');
@@ -313,7 +315,10 @@ export default function SettingsPage({ showKPI, onToggleKPI }) {
             <div className="toggle-knob" />
           </div>
           <span style={{ fontSize: '13px', color: '#495057', fontWeight: 500 }}>
-            Nightly send {officerEmailsEnabled ? 'enabled' : 'disabled'}
+            Daily send {officerEmailsEnabled ? 'enabled' : 'disabled'}
+          </span>
+          <span style={{ fontSize: '12px', color: '#868e96' }}>
+            · {(() => { const [h, m] = officerEmailsTime.split(':').map(Number); const ap = h >= 12 ? 'PM' : 'AM'; const h12 = h % 12 === 0 ? 12 : h % 12; return `${h12}:${String(m).padStart(2, '0')} ${ap} Pacific`; })()}
           </span>
           {saving === 'officer_emails_enabled' && (
             <span style={{ fontSize: '11px', color: '#adb5bd' }}>Saving…</span>
