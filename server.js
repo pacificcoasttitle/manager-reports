@@ -1321,6 +1321,71 @@ app.put('/api/settings/app', async (req, res) => {
 });
 
 // ============================================
+// PER-OFFICER EMAILS (title officers — privacy-clean, each sees only their own)
+// ============================================
+const { buildOfficerEmailHtml, sendOfficerEmails, sendOfficerEmailsTest } = require('./lib/officer-email');
+
+// List officer recipients (for Settings UI)
+app.get('/api/email/officer-recipients', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT id, officer_name, email, officer_type, is_active FROM officer_email_recipients ORDER BY officer_name'
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update a recipient's email and/or active flag
+app.put('/api/email/officer-recipients/:officerName', async (req, res) => {
+  try {
+    const officerName = decodeURIComponent(req.params.officerName);
+    const { email, is_active } = req.body;
+    await pool.query(
+      `UPDATE officer_email_recipients
+       SET email = COALESCE($2, email), is_active = COALESCE($3, is_active)
+       WHERE officer_name = $1`,
+      [officerName, email ?? null, typeof is_active === 'boolean' ? is_active : null]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Preview a single officer's email HTML (no send)
+app.get('/api/email/officer-preview/:officerName', async (req, res) => {
+  try {
+    const { html } = await buildOfficerEmailHtml(decodeURIComponent(req.params.officerName));
+    res.set('Content-Type', 'text/html').send(html);
+  } catch (err) {
+    res.status(500).send('Error: ' + err.message);
+  }
+});
+
+// Send a TEST batch — every active officer's email goes to one test address
+app.post('/api/email/officer-emails/test', async (req, res) => {
+  try {
+    const testEmail = req.body.email || 'ghernandez@pct.com';
+    const results = await sendOfficerEmailsTest(testEmail);
+    res.json({ success: true, sentTo: testEmail, results });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Send LIVE to each officer (manual trigger; cron go-live is gated separately)
+app.post('/api/email/officer-emails', async (req, res) => {
+  try {
+    const results = await sendOfficerEmails();
+    res.json({ success: true, results });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================
 // NIGHTLY CRON: Automated Revenue + Open Orders Import
 // ============================================
 // Checks every minute. Only runs at the scheduled time if cron_enabled = true.

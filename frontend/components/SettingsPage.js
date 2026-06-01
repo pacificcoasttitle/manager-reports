@@ -19,6 +19,13 @@ export default function SettingsPage({ showKPI, onToggleKPI }) {
   const [testSending, setTestSending] = useState(false);
   const [testResult, setTestResult] = useState(null);
 
+  // Officer emails (per-title-officer)
+  const [officers, setOfficers] = useState([]);
+  const [officerEmailsEnabled, setOfficerEmailsEnabled] = useState(false);
+  const [officerSaving, setOfficerSaving] = useState(null); // officer_name being saved
+  const [officerTestSending, setOfficerTestSending] = useState(false);
+  const [officerTestResult, setOfficerTestResult] = useState(null);
+
   useEffect(() => { loadSettings(); }, []);
 
   async function loadSettings() {
@@ -29,8 +36,37 @@ export default function SettingsPage({ showKPI, onToggleKPI }) {
         (settings.daily_email_recipients || '').split(',').map(e => e.trim()).filter(Boolean)
       );
       setEmailTime(settings.daily_email_time || '21:00');
+      setOfficerEmailsEnabled(settings.officer_emails_enabled === 'true');
     } catch (e) { console.error('Failed to load settings:', e); }
+    try {
+      const list = await api('/api/email/officer-recipients');
+      setOfficers(Array.isArray(list) ? list : []);
+    } catch (e) { console.error('Failed to load officer recipients:', e); }
     finally { setLoading(false); }
+  }
+
+  async function saveOfficer(officerName, patch) {
+    setOfficerSaving(officerName);
+    setOfficers(prev => prev.map(o => o.officer_name === officerName ? { ...o, ...patch } : o));
+    try {
+      await api(`/api/email/officer-recipients/${encodeURIComponent(officerName)}`, {
+        method: 'PUT', body: JSON.stringify(patch)
+      });
+    } catch (e) { console.error('Failed to save officer:', e); }
+    finally { setOfficerSaving(null); }
+  }
+
+  async function handleSendOfficerTest() {
+    setOfficerTestSending(true);
+    setOfficerTestResult(null);
+    try {
+      const result = await api('/api/email/officer-emails/test', {
+        method: 'POST', body: JSON.stringify({ email: 'ghernandez@pct.com' })
+      });
+      setOfficerTestResult({ success: true, ...result });
+    } catch (e) {
+      setOfficerTestResult({ success: false, error: e.message });
+    } finally { setOfficerTestSending(false); }
   }
 
   async function saveSetting(key, value) {
@@ -253,6 +289,99 @@ export default function SettingsPage({ showKPI, onToggleKPI }) {
             </div>
           )}
         </div>
+      </div>
+
+      {/* ── Officer Emails (per Title Officer) ── */}
+      <div style={{ background: 'white', border: '1px solid #e9ecef', borderRadius: '8px', padding: '20px', marginBottom: '16px' }}>
+        <div style={{ marginBottom: '16px' }}>
+          <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#343a40', marginBottom: '4px' }}>Officer Emails</h3>
+          <div style={{ fontSize: '12px', color: '#868e96' }}>
+            Each title officer gets a personalized daily email with only their own production (yesterday + MTD). Sent individually — no officer sees another's numbers.
+          </div>
+        </div>
+
+        {/* Master enable toggle */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '18px' }}>
+          <div
+            className={`toggle ${officerEmailsEnabled ? 'on' : ''}`}
+            onClick={async () => {
+              const next = !officerEmailsEnabled;
+              setOfficerEmailsEnabled(next);
+              await saveSetting('officer_emails_enabled', String(next));
+            }}
+          >
+            <div className="toggle-knob" />
+          </div>
+          <span style={{ fontSize: '13px', color: '#495057', fontWeight: 500 }}>
+            Nightly send {officerEmailsEnabled ? 'enabled' : 'disabled'}
+          </span>
+          {saving === 'officer_emails_enabled' && (
+            <span style={{ fontSize: '11px', color: '#adb5bd' }}>Saving…</span>
+          )}
+        </div>
+
+        {/* Officer list */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {officers.map(o => (
+            <div key={o.officer_name} style={{
+              display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap',
+              padding: '10px 12px', background: '#f8f9fa', border: '1px solid #e9ecef', borderRadius: '6px'
+            }}>
+              <div style={{ width: '140px', fontSize: '13px', fontWeight: 600, color: '#343a40' }}>
+                {o.officer_name}
+                <span style={{ fontSize: '10px', color: '#adb5bd', fontWeight: 500, marginLeft: '6px' }}>{o.officer_type}</span>
+              </div>
+              <input
+                type="email"
+                defaultValue={o.email}
+                onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== o.email) saveOfficer(o.officer_name, { email: v }); }}
+                style={{ ...inputStyle, flex: 1, minWidth: '180px' }}
+              />
+              <div
+                className={`toggle ${o.is_active ? 'on' : ''}`}
+                onClick={() => saveOfficer(o.officer_name, { is_active: !o.is_active })}
+                title={o.is_active ? 'Active' : 'Inactive'}
+              >
+                <div className="toggle-knob" />
+              </div>
+              <a
+                href={`${API_BASE}/api/email/officer-preview/${encodeURIComponent(o.officer_name)}`}
+                target="_blank" rel="noopener noreferrer"
+                style={{ fontSize: '12px', color: '#1971c2', textDecoration: 'none', whiteSpace: 'nowrap' }}
+              >
+                Preview ↗
+              </a>
+              {officerSaving === o.officer_name && (
+                <span style={{ fontSize: '11px', color: '#adb5bd' }}>Saving…</span>
+              )}
+            </div>
+          ))}
+          {officers.length === 0 && (
+            <div style={{ fontSize: '12px', color: '#adb5bd', fontStyle: 'italic' }}>No officers configured.</div>
+          )}
+        </div>
+
+        {/* Test batch */}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', paddingTop: '14px', borderTop: '1px solid #f1f3f5', marginTop: '14px' }}>
+          <button onClick={handleSendOfficerTest} disabled={officerTestSending} className="btn-accent">
+            {officerTestSending ? 'Sending…' : '✉ Send Test Batch to Me'}
+          </button>
+          <span style={{ fontSize: '11px', color: '#adb5bd' }}>
+            Sends every active officer's email to ghernandez@pct.com with a TEST banner — no officer receives anything.
+          </span>
+        </div>
+
+        {officerTestResult && (
+          <div style={{
+            padding: '10px 14px', borderRadius: '6px', fontSize: '13px', marginTop: '10px',
+            background: officerTestResult.success ? '#ecfdf5' : '#fef2f2',
+            color: officerTestResult.success ? '#065f46' : '#991b1b'
+          }}>
+            {officerTestResult.success
+              ? `✓ Test batch sent to ${officerTestResult.sentTo}: ${(officerTestResult.results || []).filter(r => r.sent).length}/${(officerTestResult.results || []).length} officers`
+              : `Error: ${officerTestResult.error}`}
+          </div>
+        )}
       </div>
 
     </div>
