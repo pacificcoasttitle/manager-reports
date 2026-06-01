@@ -27,7 +27,29 @@ export default function SettingsPage({ showKPI, onToggleKPI }) {
   const [officerTestSending, setOfficerTestSending] = useState(false);
   const [officerTestResult, setOfficerTestResult] = useState(null);
 
+  // Sales manager emails
+  const [managers, setManagers] = useState([]);
+  const [assignments, setAssignments] = useState([]);
+  const [availableReps, setAvailableReps] = useState([]);
+  const [managerEmailsEnabled, setManagerEmailsEnabled] = useState(false);
+  const [mgrSaving, setMgrSaving] = useState(null);
+  const [mgrTestSending, setMgrTestSending] = useState(false);
+  const [mgrTestResult, setMgrTestResult] = useState(null);
+  const [newMgrName, setNewMgrName] = useState('');
+  const [newMgrEmail, setNewMgrEmail] = useState('');
+  const [assignRep, setAssignRep] = useState('');
+  const [assignMgr, setAssignMgr] = useState('');
+
   useEffect(() => { loadSettings(); }, []);
+
+  async function refreshManagers() {
+    try {
+      const data = await api('/api/admin/managers');
+      setManagers(data.managers || []);
+      setAssignments(data.assignments || []);
+      setAvailableReps(data.availableReps || []);
+    } catch (e) { console.error('Failed to load managers:', e); }
+  }
 
   async function loadSettings() {
     try {
@@ -39,12 +61,65 @@ export default function SettingsPage({ showKPI, onToggleKPI }) {
       setEmailTime(settings.daily_email_time || '21:00');
       setOfficerEmailsEnabled(settings.officer_emails_enabled === 'true');
       setOfficerEmailsTime(settings.officer_emails_time || '05:00');
+      setManagerEmailsEnabled(settings.manager_emails_enabled === 'true');
     } catch (e) { console.error('Failed to load settings:', e); }
     try {
       const list = await api('/api/email/officer-recipients');
       setOfficers(Array.isArray(list) ? list : []);
     } catch (e) { console.error('Failed to load officer recipients:', e); }
-    finally { setLoading(false); }
+    await refreshManagers();
+    setLoading(false);
+  }
+
+  async function saveManager(managerName, patch) {
+    setMgrSaving(managerName);
+    setManagers(prev => prev.map(m => m.manager_name === managerName ? { ...m, ...patch } : m));
+    try {
+      await api(`/api/admin/managers/${encodeURIComponent(managerName)}`, {
+        method: 'PUT', body: JSON.stringify(patch)
+      });
+    } catch (e) { console.error('Failed to save manager:', e); }
+    finally { setMgrSaving(null); }
+  }
+
+  async function addManager() {
+    const name = newMgrName.trim();
+    const email = newMgrEmail.trim().toLowerCase();
+    if (!name || !email) return;
+    try {
+      await api('/api/admin/managers', { method: 'POST', body: JSON.stringify({ manager_name: name, email }) });
+      setNewMgrName(''); setNewMgrEmail('');
+      await refreshManagers();
+    } catch (e) { console.error('Failed to add manager:', e); }
+  }
+
+  async function assignRepToManager() {
+    if (!assignRep || !assignMgr) return;
+    try {
+      await api('/api/admin/assignments', { method: 'POST', body: JSON.stringify({ sales_rep: assignRep, manager_name: assignMgr }) });
+      setAssignRep('');
+      await refreshManagers();
+    } catch (e) { console.error('Failed to assign rep:', e); }
+  }
+
+  async function unassignRep(salesRep) {
+    try {
+      await api(`/api/admin/assignments/${encodeURIComponent(salesRep)}`, { method: 'DELETE' });
+      await refreshManagers();
+    } catch (e) { console.error('Failed to unassign rep:', e); }
+  }
+
+  async function handleSendManagerTest() {
+    setMgrTestSending(true);
+    setMgrTestResult(null);
+    try {
+      const result = await api('/api/email/manager-emails/test', {
+        method: 'POST', body: JSON.stringify({ email: 'ghernandez@pct.com' })
+      });
+      setMgrTestResult({ success: true, ...result });
+    } catch (e) {
+      setMgrTestResult({ success: false, error: e.message });
+    } finally { setMgrTestSending(false); }
   }
 
   async function saveOfficer(officerName, patch) {
@@ -385,6 +460,141 @@ export default function SettingsPage({ showKPI, onToggleKPI }) {
             {officerTestResult.success
               ? `✓ Test batch sent to ${officerTestResult.sentTo}: ${(officerTestResult.results || []).filter(r => r.sent).length}/${(officerTestResult.results || []).length} officers`
               : `Error: ${officerTestResult.error}`}
+          </div>
+        )}
+      </div>
+
+      {/* ── Sales Manager Emails ── */}
+      <div style={{ background: 'white', border: '1px solid #e9ecef', borderRadius: '8px', padding: '20px', marginBottom: '16px' }}>
+        <div style={{ marginBottom: '16px' }}>
+          <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#343a40', marginBottom: '4px' }}>Sales Manager Emails</h3>
+          <div style={{ fontSize: '12px', color: '#868e96' }}>
+            Each manager gets a daily email showing only their assigned reps — team summary, reps ranked by MTD revenue, and the team's share of company.
+          </div>
+        </div>
+
+        {/* Master enable toggle */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '18px' }}>
+          <div
+            className={`toggle ${managerEmailsEnabled ? 'on' : ''}`}
+            onClick={async () => {
+              const next = !managerEmailsEnabled;
+              setManagerEmailsEnabled(next);
+              await saveSetting('manager_emails_enabled', String(next));
+            }}
+          >
+            <div className="toggle-knob" />
+          </div>
+          <span style={{ fontSize: '13px', color: '#495057', fontWeight: 500 }}>
+            Daily send {managerEmailsEnabled ? 'enabled' : 'disabled'}
+          </span>
+          {saving === 'manager_emails_enabled' && (
+            <span style={{ fontSize: '11px', color: '#adb5bd' }}>Saving…</span>
+          )}
+        </div>
+
+        {/* Manager list */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {managers.map(m => {
+            const myReps = assignments.filter(a => a.manager_name === m.manager_name);
+            return (
+              <div key={m.manager_name} style={{ padding: '12px', background: '#f8f9fa', border: '1px solid #e9ecef', borderRadius: '6px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: myReps.length ? '10px' : '0' }}>
+                  <div style={{ width: '140px', fontSize: '13px', fontWeight: 600, color: '#343a40' }}>{m.manager_name}</div>
+                  <input
+                    type="email"
+                    defaultValue={m.email}
+                    onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== m.email) saveManager(m.manager_name, { email: v }); }}
+                    style={{ ...inputStyle, flex: 1, minWidth: '180px' }}
+                  />
+                  <div
+                    className={`toggle ${m.is_active ? 'on' : ''}`}
+                    onClick={() => saveManager(m.manager_name, { is_active: !m.is_active })}
+                    title={m.is_active ? 'Active' : 'Inactive'}
+                  >
+                    <div className="toggle-knob" />
+                  </div>
+                  <a
+                    href={`${API_BASE}/api/email/manager-preview/${encodeURIComponent(m.manager_name)}`}
+                    target="_blank" rel="noopener noreferrer"
+                    style={{ fontSize: '12px', color: '#1971c2', textDecoration: 'none', whiteSpace: 'nowrap' }}
+                  >
+                    Preview ↗
+                  </a>
+                  {mgrSaving === m.manager_name && (
+                    <span style={{ fontSize: '11px', color: '#adb5bd' }}>Saving…</span>
+                  )}
+                </div>
+                {/* Assigned reps */}
+                {myReps.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', paddingLeft: '2px' }}>
+                    {myReps.map(a => (
+                      <div key={a.sales_rep} style={{
+                        display: 'flex', alignItems: 'center', gap: '6px', padding: '3px 8px',
+                        background: '#fff', border: '1px solid #dee2e6', borderRadius: '14px', fontSize: '12px', color: '#495057'
+                      }}>
+                        {a.sales_rep}
+                        <span onClick={() => unassignRep(a.sales_rep)} title="Unassign"
+                          style={{ cursor: 'pointer', color: '#adb5bd', fontWeight: 700, fontSize: '14px', lineHeight: '1' }}>×</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {myReps.length === 0 && (
+                  <div style={{ fontSize: '11px', color: '#adb5bd', fontStyle: 'italic' }}>No reps assigned — this manager won't receive an email.</div>
+                )}
+              </div>
+            );
+          })}
+          {managers.length === 0 && (
+            <div style={{ fontSize: '12px', color: '#adb5bd', fontStyle: 'italic' }}>No managers yet — add one below.</div>
+          )}
+        </div>
+
+        {/* Add manager */}
+        <div style={{ display: 'flex', gap: '8px', marginTop: '14px', flexWrap: 'wrap' }}>
+          <input type="text" value={newMgrName} onChange={(e) => setNewMgrName(e.target.value)}
+            placeholder="Manager name" style={{ ...inputStyle, flex: 1, minWidth: '140px' }} />
+          <input type="email" value={newMgrEmail} onChange={(e) => setNewMgrEmail(e.target.value)}
+            placeholder="manager@pct.com" style={{ ...inputStyle, flex: 1, minWidth: '160px' }} />
+          <button onClick={addManager} disabled={!newMgrName.trim() || !newMgrEmail.trim()} className="btn-primary" style={{ whiteSpace: 'nowrap', padding: '8px 16px' }}>Add Manager</button>
+        </div>
+
+        {/* Assign reps */}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '10px', flexWrap: 'wrap', paddingTop: '12px', borderTop: '1px solid #f1f3f5' }}>
+          <span style={{ fontSize: '12px', color: '#868e96', whiteSpace: 'nowrap' }}>Assign rep</span>
+          <select value={assignRep} onChange={(e) => setAssignRep(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: '160px' }}>
+            <option value="">Select rep…</option>
+            {availableReps.map(r => <option key={r} value={r}>{r}</option>)}
+          </select>
+          <span style={{ fontSize: '12px', color: '#868e96' }}>to</span>
+          <select value={assignMgr} onChange={(e) => setAssignMgr(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: '140px' }}>
+            <option value="">Select manager…</option>
+            {managers.map(m => <option key={m.manager_name} value={m.manager_name}>{m.manager_name}</option>)}
+          </select>
+          <button onClick={assignRepToManager} disabled={!assignRep || !assignMgr} className="btn-primary" style={{ whiteSpace: 'nowrap', padding: '8px 16px' }}>Assign</button>
+        </div>
+        <div style={{ fontSize: '11px', color: '#adb5bd', marginTop: '4px' }}>{availableReps.length} unassigned rep{availableReps.length === 1 ? '' : 's'} remaining</div>
+
+        {/* Test batch */}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', paddingTop: '14px', borderTop: '1px solid #f1f3f5', marginTop: '14px' }}>
+          <button onClick={handleSendManagerTest} disabled={mgrTestSending} className="btn-accent">
+            {mgrTestSending ? 'Sending…' : '✉ Send Test Batch to Me'}
+          </button>
+          <span style={{ fontSize: '11px', color: '#adb5bd' }}>
+            Sends every active manager's email to ghernandez@pct.com with a TEST banner — no manager receives anything.
+          </span>
+        </div>
+
+        {mgrTestResult && (
+          <div style={{
+            padding: '10px 14px', borderRadius: '6px', fontSize: '13px', marginTop: '10px',
+            background: mgrTestResult.success ? '#ecfdf5' : '#fef2f2',
+            color: mgrTestResult.success ? '#065f46' : '#991b1b'
+          }}>
+            {mgrTestResult.success
+              ? `✓ Test batch sent to ${mgrTestResult.sentTo}: ${(mgrTestResult.results || []).filter(r => r.sent).length}/${(mgrTestResult.results || []).length} managers`
+              : `Error: ${mgrTestResult.error}`}
           </div>
         )}
       </div>

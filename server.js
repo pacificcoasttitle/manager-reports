@@ -1386,6 +1386,121 @@ app.post('/api/email/officer-emails', async (req, res) => {
 });
 
 // ============================================
+// PER-MANAGER EMAILS (sales managers — each sees only their assigned reps)
+// ============================================
+const { buildManagerEmailHtml, sendManagerEmails, sendManagerEmailsTest } = require('./lib/manager-email');
+
+// Preview a manager's email HTML (no send)
+app.get('/api/email/manager-preview/:managerName', async (req, res) => {
+  try {
+    const { html, hasData } = await buildManagerEmailHtml(decodeURIComponent(req.params.managerName));
+    if (!hasData) return res.send('No reps assigned to this manager.');
+    res.set('Content-Type', 'text/html').send(html);
+  } catch (err) {
+    res.status(500).send('Error: ' + err.message);
+  }
+});
+
+// Send a TEST batch — every active manager's email goes to one test address
+app.post('/api/email/manager-emails/test', async (req, res) => {
+  try {
+    const testEmail = req.body.email || 'ghernandez@pct.com';
+    const results = await sendManagerEmailsTest(testEmail);
+    res.json({ success: true, sentTo: testEmail, results });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Send LIVE to each manager (manual trigger; cron go-live gated separately)
+app.post('/api/email/manager-emails', async (req, res) => {
+  try {
+    const results = await sendManagerEmails();
+    res.json({ success: true, results });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Manager + assignment management (Settings UI) ---
+
+// Managers, assignments, and reps available to assign
+app.get('/api/admin/managers', async (req, res) => {
+  try {
+    const { rows: managers } = await pool.query('SELECT * FROM sales_managers ORDER BY manager_name');
+    const { rows: assignments } = await pool.query('SELECT * FROM rep_manager_assignments ORDER BY manager_name, sales_rep');
+    const { rows: unassigned } = await pool.query(`
+      SELECT DISTINCT sales_rep FROM order_summary
+      WHERE sales_rep IS NOT NULL AND sales_rep <> ''
+        AND sales_rep NOT IN (SELECT sales_rep FROM rep_manager_assignments)
+      ORDER BY sales_rep
+    `);
+    res.json({ managers, assignments, availableReps: unassigned.map(r => r.sales_rep) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Create a manager
+app.post('/api/admin/managers', async (req, res) => {
+  try {
+    const { manager_name, email } = req.body;
+    if (!manager_name || !email) return res.status(400).json({ error: 'manager_name and email required' });
+    await pool.query(
+      `INSERT INTO sales_managers (manager_name, email) VALUES ($1, $2)
+       ON CONFLICT (manager_name) DO UPDATE SET email = $2`,
+      [manager_name, email]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update a manager's email and/or active flag
+app.put('/api/admin/managers/:managerName', async (req, res) => {
+  try {
+    const managerName = decodeURIComponent(req.params.managerName);
+    const { email, is_active } = req.body;
+    await pool.query(
+      `UPDATE sales_managers
+       SET email = COALESCE($2, email), is_active = COALESCE($3, is_active)
+       WHERE manager_name = $1`,
+      [managerName, email ?? null, typeof is_active === 'boolean' ? is_active : null]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Assign a rep to a manager (1 rep = 1 manager; upsert)
+app.post('/api/admin/assignments', async (req, res) => {
+  try {
+    const { sales_rep, manager_name } = req.body;
+    if (!sales_rep || !manager_name) return res.status(400).json({ error: 'sales_rep and manager_name required' });
+    await pool.query(
+      `INSERT INTO rep_manager_assignments (sales_rep, manager_name) VALUES ($1, $2)
+       ON CONFLICT (sales_rep) DO UPDATE SET manager_name = $2`,
+      [sales_rep, manager_name]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Unassign a rep
+app.delete('/api/admin/assignments/:salesRep', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM rep_manager_assignments WHERE sales_rep = $1', [decodeURIComponent(req.params.salesRep)]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================
 // NIGHTLY CRON: Automated Revenue + Open Orders Import
 // ============================================
 // Checks every minute. Only runs at the scheduled time if cron_enabled = true.
