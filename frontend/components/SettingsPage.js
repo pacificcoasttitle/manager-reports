@@ -116,6 +116,7 @@ export default function SettingsPage({ showKPI, onToggleKPI }) {
       setOfficerEmailsEnabled(settings.officer_emails_enabled === 'true');
       setOfficerEmailsTime(settings.officer_emails_time || '05:00');
       setManagerEmailsEnabled(settings.manager_emails_enabled === 'true');
+      setRepEmailsEnabled(settings.rep_emails_enabled === 'true');
     } catch (e) { console.error('Failed to load settings:', e); }
     try {
       const list = await api('/api/email/officer-recipients');
@@ -670,9 +671,7 @@ export default function SettingsPage({ showKPI, onToggleKPI }) {
             onClick={async () => {
               const next = !repEmailsEnabled;
               setRepEmailsEnabled(next);
-              try {
-                await api('/api/admin/rep-emails-enabled', { method: 'PUT', body: JSON.stringify({ enabled: next }) });
-              } catch (e) { console.error('Failed to toggle rep emails:', e); }
+              await saveSetting('rep_emails_enabled', String(next));
             }}
           >
             <div className="toggle-knob" />
@@ -680,6 +679,9 @@ export default function SettingsPage({ showKPI, onToggleKPI }) {
           <span style={{ fontSize: '13px', color: '#495057', fontWeight: 500 }}>
             Daily send {repEmailsEnabled ? 'enabled' : 'disabled'}
           </span>
+          {saving === 'rep_emails_enabled' && (
+            <span style={{ fontSize: '11px', color: '#adb5bd' }}>Saving…</span>
+          )}
         </div>
 
         {/* Rep list — compact rows */}

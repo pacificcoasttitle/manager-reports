@@ -1712,11 +1712,36 @@ cron.schedule('0 5 * * *', async () => {
       VALUES ('officer_emails', 0, false, $1, 'cron')
     `, [err.message]).catch(() => {});
   }
+
+  // Rep emails — gated by app_settings.rep_emails_enabled (independent of officer flag)
+  const { rows: repFlag } = await pool.query("SELECT value FROM app_settings WHERE key = 'rep_emails_enabled'");
+  if (repFlag[0]?.value !== 'true') {
+    console.log('Rep emails disabled — skipping');
+  } else {
+    try {
+      const repResults = await sendRepEmails();
+      const repSent = repResults.filter(r => r.sent).length;
+      console.log(`Rep emails sent: ${repSent}/${repResults.length}`);
+      repResults.forEach(r => {
+        if (!r.sent) console.error(`  FAILED: ${r.rep} — ${r.error}`);
+      });
+      await pool.query(`
+        INSERT INTO import_log (import_type, records_imported, success, triggered_by)
+        VALUES ('rep_emails', $1, true, 'cron')
+      `, [repSent]).catch(() => {});
+    } catch (err) {
+      console.error('Rep emails FAILED:', err.message);
+      await pool.query(`
+        INSERT INTO import_log (import_type, records_imported, success, error_message, triggered_by)
+        VALUES ('rep_emails', 0, false, $1, 'cron')
+      `, [err.message]).catch(() => {});
+    }
+  }
 }, {
   timezone: 'America/Los_Angeles'
 });
 
-console.log('Officer emails scheduled: 5:00 AM Pacific daily');
+console.log('Officer + rep emails scheduled: 5:00 AM Pacific daily');
 
 // ============================================
 // START SERVER
