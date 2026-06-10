@@ -1737,11 +1737,36 @@ cron.schedule('0 5 * * *', async () => {
       `, [err.message]).catch(() => {});
     }
   }
+
+  // Manager emails — gated by app_settings.manager_emails_enabled
+  const { rows: mgrEnabled } = await pool.query("SELECT value FROM app_settings WHERE key = 'manager_emails_enabled'");
+  if (mgrEnabled[0]?.value !== 'true') {
+    console.log('Manager emails disabled — skipping');
+  } else {
+    try {
+      const mgrResults = await sendManagerEmails();
+      const mgrSent = mgrResults.filter(r => r.sent).length;
+      console.log(`Manager emails sent: ${mgrSent}/${mgrResults.length}`);
+      mgrResults.forEach(r => {
+        if (!r.sent) console.error(`  FAILED: ${r.manager} — ${r.error || r.reason}`);
+      });
+      await pool.query(`
+        INSERT INTO import_log (import_type, records_imported, success, triggered_by)
+        VALUES ('manager_emails', $1, true, 'cron')
+      `, [mgrSent]).catch(() => {});
+    } catch (err) {
+      console.error('Manager emails FAILED:', err.message);
+      await pool.query(`
+        INSERT INTO import_log (import_type, records_imported, success, error_message, triggered_by)
+        VALUES ('manager_emails', 0, false, $1, 'cron')
+      `, [err.message]).catch(() => {});
+    }
+  }
 }, {
   timezone: 'America/Los_Angeles'
 });
 
-console.log('Officer + rep emails scheduled: 5:00 AM Pacific daily');
+console.log('Officer + rep + manager emails scheduled: 5:00 AM Pacific daily');
 
 // ============================================
 // START SERVER
