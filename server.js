@@ -732,7 +732,7 @@ app.get('/api/td/rep/:repName', async (req, res) => {
     const priorMonth = getPriorMonth(month);
     const yesterday = getYesterdayPacific();
 
-    const [mtdResult, ydayResult, openResult, ydayOpenResult, priorResult, ratioResult, workDayResult, rankResult, totalRepsResult] = await Promise.all([
+    const [mtdResult, ydayResult, openResult, openTypeResult, ydayOpenResult, priorResult, ratioResult, workDayResult, rankResult, totalRepsResult] = await Promise.all([
       pool.query(`
         SELECT COUNT(*) as mtd_closed,
                ROUND(COALESCE(SUM(total_revenue),0)::numeric, 2) as mtd_revenue,
@@ -753,6 +753,18 @@ app.get('/api/td/rep/:repName', async (req, res) => {
       `, [repName, yesterday]),
       pool.query(`
         SELECT COUNT(*) as mtd_opens FROM open_orders WHERE sales_rep = $1 AND open_month = $2
+      `, [repName, month]),
+      pool.query(`
+        SELECT
+          CASE
+            WHEN LOWER(trans_type) = 'purchase' THEN 'purchase'
+            WHEN LOWER(trans_type) = 'refinance' THEN 'refinance'
+            ELSE 'other'
+          END as type,
+          COUNT(*)::int as count
+        FROM open_orders
+        WHERE sales_rep = $1 AND open_month = $2
+        GROUP BY type
       `, [repName, month]),
       pool.query(`
         SELECT COUNT(*) as yesterday_opens FROM open_orders WHERE sales_rep = $1 AND received_date = $2
@@ -795,6 +807,20 @@ app.get('/api/td/rep/:repName', async (req, res) => {
     const created = parseInt(ratio.created_4m) || 0;
     const closed = parseInt(ratio.closed_4m) || 0;
 
+    const openingsByType = {
+      purchase: { count: 0, revenue: 0 },
+      refinance: { count: 0, revenue: 0 },
+    };
+    openTypeResult.rows.forEach(r => {
+      if (r.type === 'purchase') openingsByType.purchase.count = parseInt(r.count) || 0;
+      if (r.type === 'refinance') openingsByType.refinance.count = parseInt(r.count) || 0;
+    });
+
+    const closingsByType = {
+      purchase: { count: parseInt(mtd.mtd_purchase) || 0, revenue: parseFloat(mtd.mtd_purchase_rev) || 0 },
+      refinance: { count: parseInt(mtd.mtd_refi) || 0, revenue: parseFloat(mtd.mtd_refi_rev) || 0 },
+    };
+
     res.json({
       rep: repName,
       month,
@@ -811,7 +837,9 @@ app.get('/api/td/rep/:repName', async (req, res) => {
         purchase: { count: parseInt(mtd.mtd_purchase), revenue: parseFloat(mtd.mtd_purchase_rev) },
         refinance: { count: parseInt(mtd.mtd_refi), revenue: parseFloat(mtd.mtd_refi_rev) },
         escrow: { count: parseInt(mtd.mtd_escrow), revenue: parseFloat(mtd.mtd_escrow_rev) },
-        tsg: { count: parseInt(mtd.mtd_tsg), revenue: parseFloat(mtd.mtd_tsg_rev) }
+        tsg: { count: parseInt(mtd.mtd_tsg), revenue: parseFloat(mtd.mtd_tsg_rev) },
+        openingsByType,
+        closingsByType,
       },
       prior: {
         month: priorMonth,
