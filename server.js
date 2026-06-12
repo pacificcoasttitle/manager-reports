@@ -808,17 +808,19 @@ app.get('/api/td/rep/:repName', async (req, res) => {
     const closed = parseInt(ratio.closed_4m) || 0;
 
     const openingsByType = {
-      purchase: { count: 0, revenue: 0 },
-      refinance: { count: 0, revenue: 0 },
+      purchase: { count: 0 },
+      refinance: { count: 0 },
+      other: { count: 0 },
     };
     openTypeResult.rows.forEach(r => {
-      if (r.type === 'purchase') openingsByType.purchase.count = parseInt(r.count) || 0;
-      if (r.type === 'refinance') openingsByType.refinance.count = parseInt(r.count) || 0;
+      if (openingsByType[r.type]) openingsByType[r.type].count = parseInt(r.count) || 0;
     });
 
     const closingsByType = {
       purchase: { count: parseInt(mtd.mtd_purchase) || 0, revenue: parseFloat(mtd.mtd_purchase_rev) || 0 },
       refinance: { count: parseInt(mtd.mtd_refi) || 0, revenue: parseFloat(mtd.mtd_refi_rev) || 0 },
+      escrow: { count: parseInt(mtd.mtd_escrow) || 0, revenue: parseFloat(mtd.mtd_escrow_rev) || 0 },
+      tsg: { count: parseInt(mtd.mtd_tsg) || 0, revenue: parseFloat(mtd.mtd_tsg_rev) || 0 },
     };
 
     res.json({

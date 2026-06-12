@@ -70,12 +70,15 @@ GET /api/td/rep/Kevin%20Green?month=2026-02
     "escrow": { "count": 5, "revenue": 4500.00 },
     "tsg": { "count": 2, "revenue": 1000.00 },
     "openingsByType": {
-      "purchase": { "count": 40, "revenue": 0 },
-      "refinance": { "count": 18, "revenue": 0 }
+      "purchase": { "count": 40 },
+      "refinance": { "count": 18 },
+      "other": { "count": 4 }
     },
     "closingsByType": {
       "purchase": { "count": 30, "revenue": 65000.00 },
-      "refinance": { "count": 8, "revenue": 12000.00 }
+      "refinance": { "count": 8, "revenue": 12000.00 },
+      "escrow": { "count": 5, "revenue": 4500.00 },
+      "tsg": { "count": 2, "revenue": 1000.00 }
     }
   },
   "prior": {
@@ -106,8 +109,8 @@ GET /api/td/rep/Kevin%20Green?month=2026-02
 
 | Field | Shape | Description |
 |-------|-------|-------------|
-| `mtd.openingsByType` | `{ purchase: {count, revenue}, refinance: {count, revenue} }` | Openings split by transaction type. Same source/scope as `mtd.opens` (`sales_rep` + `open_month`). Revenue is always `0` — open orders carry no revenue. Non-Purchase/Refi opens (e.g. `trans_type = 'Other'`) are omitted; purchase + refinance may be less than `mtd.opens`. |
-| `mtd.closingsByType` | `{ purchase: {count, revenue}, refinance: {count, revenue} }` | Closings split by type. Same data as `mtd.purchase` / `mtd.refinance`, explicit name. Purchase + Refinance only — escrow and TSG closings remain in `mtd.escrow` / `mtd.tsg`. |
+| `mtd.openingsByType` | `{ purchase, refinance, other }` each `{ count }` | Openings split by transaction type. Same source/scope as `mtd.opens` (`sales_rep` + `open_month`). Count-only — open orders carry no revenue. The three buckets sum to `mtd.opens`. |
+| `mtd.closingsByType` | `{ purchase, refinance, escrow, tsg }` each `{ count, revenue }` | Closings split by category. Same data as `mtd.purchase` / `mtd.refinance` / `mtd.escrow` / `mtd.tsg`. The four buckets sum to `mtd.closed`. |
 
 ---
 
