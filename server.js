@@ -746,7 +746,10 @@ app.get('/api/td/rep/:repName', async (req, res) => {
                ROUND(COALESCE(SUM(CASE WHEN category = 'TSG' THEN total_revenue ELSE 0 END),0)::numeric, 2) as mtd_tsg_rev,
                ROUND(COALESCE(SUM(title_revenue + underwriter_revenue),0)::numeric, 2) as mtd_title_stream,
                ROUND(COALESCE(SUM(tsg_revenue),0)::numeric, 2) as mtd_tsg_stream,
-               ROUND(COALESCE(SUM(CASE WHEN order_type IN ('Title & Escrow','Escrow Only') THEN commissionable_escrow ELSE 0 END),0)::numeric, 2) as mtd_comm_escrow
+               ROUND(COALESCE(SUM(CASE WHEN order_type IN ('Title & Escrow','Escrow Only') THEN commissionable_escrow ELSE 0 END),0)::numeric, 2) as mtd_comm_escrow,
+               ROUND(COALESCE(SUM(CASE WHEN LOWER(trans_type) = 'purchase' THEN title_revenue + underwriter_revenue + commissionable_escrow + tsg_revenue ELSE 0 END),0)::numeric, 2) as mtd_prod_purchase,
+               ROUND(COALESCE(SUM(CASE WHEN LOWER(trans_type) = 'refinance' THEN title_revenue + underwriter_revenue + commissionable_escrow + tsg_revenue ELSE 0 END),0)::numeric, 2) as mtd_prod_refi,
+               ROUND(COALESCE(SUM(CASE WHEN LOWER(trans_type) NOT IN ('purchase','refinance') OR trans_type IS NULL THEN title_revenue + underwriter_revenue + commissionable_escrow + tsg_revenue ELSE 0 END),0)::numeric, 2) as mtd_prod_other
         FROM order_summary WHERE sales_rep = $1 AND fetch_month = $2
       `, [repName, month]),
       pool.query(`
@@ -830,6 +833,21 @@ app.get('/api/td/rep/:repName', async (req, res) => {
     const mtdClosed = parseInt(mtd.mtd_closed) || 0;
     const projectCount = (value) => (worked > 0 ? Math.round((value / worked) * totalWd) : 0);
 
+    const repTitleRev = parseFloat(mtd.mtd_title_stream) || 0;
+    const repCommEscrow = parseFloat(mtd.mtd_comm_escrow) || 0;
+    const repTsgRev = parseFloat(mtd.mtd_tsg_stream) || 0;
+    const repTotalProduction = Math.round((repTitleRev + repCommEscrow + repTsgRev) * 100) / 100;
+
+    const repProductionByDealType = {
+      purchase: parseFloat(mtd.mtd_prod_purchase) || 0,
+      refinance: parseFloat(mtd.mtd_prod_refi) || 0,
+      other: parseFloat(mtd.mtd_prod_other) || 0,
+    };
+    const dealTypeSum = Math.round((repProductionByDealType.purchase + repProductionByDealType.refinance + repProductionByDealType.other) * 100) / 100;
+    if (Math.abs(dealTypeSum - repTotalProduction) > 0.01) {
+      console.warn(`[td/rep] ${repName}: repProductionByDealType sums to ${dealTypeSum}, expected repTotalProduction ${repTotalProduction}`);
+    }
+
     res.json({
       rep: repName,
       month,
@@ -851,10 +869,11 @@ app.get('/api/td/rep/:repName', async (req, res) => {
         closingsByType,
         projectedOpens: projectCount(mtdOpens),
         projectedClosings: projectCount(mtdClosed),
-        titleRevenue: parseFloat(mtd.mtd_title_stream) || 0,
-        commissionableEscrow: parseFloat(mtd.mtd_comm_escrow) || 0,
-        tsgRevenue: parseFloat(mtd.mtd_tsg_stream) || 0,
-        repTotalProduction: Math.round(((parseFloat(mtd.mtd_title_stream) || 0) + (parseFloat(mtd.mtd_comm_escrow) || 0) + (parseFloat(mtd.mtd_tsg_stream) || 0)) * 100) / 100,
+        titleRevenue: repTitleRev,
+        commissionableEscrow: repCommEscrow,
+        tsgRevenue: repTsgRev,
+        repTotalProduction,
+        repProductionByDealType,
       },
       prior: {
         month: priorMonth,

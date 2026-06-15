@@ -120,6 +120,7 @@ GET /api/td/rep/Kevin%20Green?month=2026-02
 | `mtd.tsgRevenue` | number | Rep TSG stream: `tsg_revenue` ($). |
 | `mtd.repTotalProduction` | number | `titleRevenue + commissionableEscrow + tsgRevenue`. The rep-facing total. Differs from `mtd.revenue` (full `total_revenue`) by the excluded loan-tie-in amount. Use this for rep-facing displays. |
 | `mtd.revenue` | number | **UNCHANGED** — full company-side `total_revenue` (includes loan tie-in). Existing consumers unaffected. |
+| `mtd.repProductionByDealType` | `{ purchase, refinance, other }` ($) | A second lens on `repTotalProduction`, split by each file's `trans_type` (NOT by revenue stream). Each file's full rep contribution (`title + underwriter + commissionable escrow + tsg`) is bucketed by its `trans_type`; `other` catches TSG and any non-purchase/refi type. `purchase + refinance + other = repTotalProduction`. NOT additive to the hero — a decomposition of it. Distinct from `openingsByType`/`closingsByType` (those are COUNTS by type; this is rep-production DOLLARS). |
 
 ---
 
