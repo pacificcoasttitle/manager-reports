@@ -743,7 +743,10 @@ app.get('/api/td/rep/:repName', async (req, res) => {
                ROUND(COALESCE(SUM(CASE WHEN category = 'Purchase' THEN total_revenue ELSE 0 END),0)::numeric, 2) as mtd_purchase_rev,
                ROUND(COALESCE(SUM(CASE WHEN category = 'Refinance' THEN total_revenue ELSE 0 END),0)::numeric, 2) as mtd_refi_rev,
                ROUND(COALESCE(SUM(CASE WHEN category = 'Escrow' THEN total_revenue ELSE 0 END),0)::numeric, 2) as mtd_escrow_rev,
-               ROUND(COALESCE(SUM(CASE WHEN category = 'TSG' THEN total_revenue ELSE 0 END),0)::numeric, 2) as mtd_tsg_rev
+               ROUND(COALESCE(SUM(CASE WHEN category = 'TSG' THEN total_revenue ELSE 0 END),0)::numeric, 2) as mtd_tsg_rev,
+               ROUND(COALESCE(SUM(title_revenue + underwriter_revenue),0)::numeric, 2) as mtd_title_stream,
+               ROUND(COALESCE(SUM(tsg_revenue),0)::numeric, 2) as mtd_tsg_stream,
+               ROUND(COALESCE(SUM(CASE WHEN order_type IN ('Title & Escrow','Escrow Only') THEN commissionable_escrow ELSE 0 END),0)::numeric, 2) as mtd_comm_escrow
         FROM order_summary WHERE sales_rep = $1 AND fetch_month = $2
       `, [repName, month]),
       pool.query(`
@@ -848,6 +851,10 @@ app.get('/api/td/rep/:repName', async (req, res) => {
         closingsByType,
         projectedOpens: projectCount(mtdOpens),
         projectedClosings: projectCount(mtdClosed),
+        titleRevenue: parseFloat(mtd.mtd_title_stream) || 0,
+        commissionableEscrow: parseFloat(mtd.mtd_comm_escrow) || 0,
+        tsgRevenue: parseFloat(mtd.mtd_tsg_stream) || 0,
+        repTotalProduction: Math.round(((parseFloat(mtd.mtd_title_stream) || 0) + (parseFloat(mtd.mtd_comm_escrow) || 0) + (parseFloat(mtd.mtd_tsg_stream) || 0)) * 100) / 100,
       },
       prior: {
         month: priorMonth,

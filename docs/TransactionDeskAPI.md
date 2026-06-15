@@ -115,6 +115,11 @@ GET /api/td/rep/Kevin%20Green?month=2026-02
 | `mtd.closingsByType` | `{ purchase, refinance, escrow, tsg }` each `{ count, revenue }` | Closings split by category. Same data as `mtd.purchase` / `mtd.refinance` / `mtd.escrow` / `mtd.tsg`. The four buckets sum to `mtd.closed`. |
 | `mtd.projectedOpens` | integer | Projected total openings for the month. Same run-rate basis as `mtd.projected` (revenue): `round(mtd.opens / workingDays.worked × workingDays.total)`. |
 | `mtd.projectedClosings` | integer | Projected total closings for the month. Same run-rate basis as `mtd.projected`: `round(mtd.closed / workingDays.worked × workingDays.total)`. |
+| `mtd.titleRevenue` | number | Rep title stream: `title_revenue + underwriter_revenue` ($). |
+| `mtd.commissionableEscrow` | number | Rep escrow stream: settlement + credits only, **excludes loan tie-in** ($). Scoped to `order_type IN ('Title & Escrow','Escrow Only')`. |
+| `mtd.tsgRevenue` | number | Rep TSG stream: `tsg_revenue` ($). |
+| `mtd.repTotalProduction` | number | `titleRevenue + commissionableEscrow + tsgRevenue`. The rep-facing total. Differs from `mtd.revenue` (full `total_revenue`) by the excluded loan-tie-in amount. Use this for rep-facing displays. |
+| `mtd.revenue` | number | **UNCHANGED** — full company-side `total_revenue` (includes loan tie-in). Existing consumers unaffected. |
 
 ---
 
