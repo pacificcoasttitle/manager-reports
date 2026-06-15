@@ -823,6 +823,10 @@ app.get('/api/td/rep/:repName', async (req, res) => {
       tsg: { count: parseInt(mtd.mtd_tsg) || 0, revenue: parseFloat(mtd.mtd_tsg_rev) || 0 },
     };
 
+    const mtdOpens = parseInt(openResult.rows[0].mtd_opens) || 0;
+    const mtdClosed = parseInt(mtd.mtd_closed) || 0;
+    const projectCount = (value) => (worked > 0 ? Math.round((value / worked) * totalWd) : 0);
+
     res.json({
       rep: repName,
       month,
@@ -833,15 +837,17 @@ app.get('/api/td/rep/:repName', async (req, res) => {
         opens: parseInt(ydayOpenResult.rows[0].yesterday_opens) || 0
       },
       mtd: {
-        closed: parseInt(mtd.mtd_closed) || 0,
+        closed: mtdClosed,
         revenue: mtdRev,
-        opens: parseInt(openResult.rows[0].mtd_opens) || 0,
+        opens: mtdOpens,
         purchase: { count: parseInt(mtd.mtd_purchase), revenue: parseFloat(mtd.mtd_purchase_rev) },
         refinance: { count: parseInt(mtd.mtd_refi), revenue: parseFloat(mtd.mtd_refi_rev) },
         escrow: { count: parseInt(mtd.mtd_escrow), revenue: parseFloat(mtd.mtd_escrow_rev) },
         tsg: { count: parseInt(mtd.mtd_tsg), revenue: parseFloat(mtd.mtd_tsg_rev) },
         openingsByType,
         closingsByType,
+        projectedOpens: projectCount(mtdOpens),
+        projectedClosings: projectCount(mtdClosed),
       },
       prior: {
         month: priorMonth,

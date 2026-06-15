@@ -79,7 +79,9 @@ GET /api/td/rep/Kevin%20Green?month=2026-02
       "refinance": { "count": 8, "revenue": 12000.00 },
       "escrow": { "count": 5, "revenue": 4500.00 },
       "tsg": { "count": 2, "revenue": 1000.00 }
-    }
+    },
+    "projectedOpens": 69,
+    "projectedClosings": 50
   },
   "prior": {
     "month": "2026-01",
@@ -111,6 +113,8 @@ GET /api/td/rep/Kevin%20Green?month=2026-02
 |-------|-------|-------------|
 | `mtd.openingsByType` | `{ purchase, refinance, other }` each `{ count }` | Openings split by transaction type. Same source/scope as `mtd.opens` (`sales_rep` + `open_month`). Count-only — open orders carry no revenue. The three buckets sum to `mtd.opens`. |
 | `mtd.closingsByType` | `{ purchase, refinance, escrow, tsg }` each `{ count, revenue }` | Closings split by category. Same data as `mtd.purchase` / `mtd.refinance` / `mtd.escrow` / `mtd.tsg`. The four buckets sum to `mtd.closed`. |
+| `mtd.projectedOpens` | integer | Projected total openings for the month. Same run-rate basis as `mtd.projected` (revenue): `round(mtd.opens / workingDays.worked × workingDays.total)`. |
+| `mtd.projectedClosings` | integer | Projected total closings for the month. Same run-rate basis as `mtd.projected`: `round(mtd.closed / workingDays.worked × workingDays.total)`. |
 
 ---
 
