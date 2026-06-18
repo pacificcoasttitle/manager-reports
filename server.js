@@ -746,7 +746,7 @@ app.get('/api/td/rep/:repName', async (req, res) => {
                ROUND(COALESCE(SUM(CASE WHEN category = 'TSG' THEN total_revenue ELSE 0 END),0)::numeric, 2) as mtd_tsg_rev,
                ROUND(COALESCE(SUM(title_revenue + underwriter_revenue),0)::numeric, 2) as mtd_title_stream,
                ROUND(COALESCE(SUM(tsg_revenue),0)::numeric, 2) as mtd_tsg_stream,
-               ROUND(COALESCE(SUM(CASE WHEN order_type IN ('Title & Escrow','Escrow Only') THEN commissionable_escrow ELSE 0 END),0)::numeric, 2) as mtd_comm_escrow,
+               ROUND(COALESCE(SUM(CASE WHEN escrow_revenue > 0 THEN commissionable_escrow ELSE 0 END),0)::numeric, 2) as mtd_comm_escrow,
                ROUND(COALESCE(SUM(CASE WHEN LOWER(trans_type) = 'purchase' THEN title_revenue + underwriter_revenue + commissionable_escrow + tsg_revenue ELSE 0 END),0)::numeric, 2) as mtd_prod_purchase,
                ROUND(COALESCE(SUM(CASE WHEN LOWER(trans_type) = 'refinance' THEN title_revenue + underwriter_revenue + commissionable_escrow + tsg_revenue ELSE 0 END),0)::numeric, 2) as mtd_prod_refi,
                ROUND(COALESCE(SUM(CASE WHEN LOWER(trans_type) NOT IN ('purchase','refinance') OR trans_type IS NULL THEN title_revenue + underwriter_revenue + commissionable_escrow + tsg_revenue ELSE 0 END),0)::numeric, 2) as mtd_prod_other
