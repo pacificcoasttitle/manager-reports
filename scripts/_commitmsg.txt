@@ -1,0 +1,7 @@
+Add escrow officer daily email scaffolding (preview + test routes only)
+
+Seeds 6 escrow officers (5 active, Analleli inactive). Builds
+lib/escrow-officer-email.js modeled on the title officer email, grouped on
+escrow_officer with revenue = commissionable_escrow scoped by escrow_revenue > 0
+(rep base placeholder until the wider officer base is ruled on). Adds preview
+and test-only API routes. NOT wired into cron - no officer receives anything.

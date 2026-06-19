@@ -1,0 +1,334 @@
+﻿git : warning: in the working copy of 'lib/reports.js', LF will be replaced by CRLF the next time Git touches it
+At C:\Users\gerar\AppData\Local\Temp\ps-script-37b577b3-7f5b-4b3e-a5e0-1e6b6688f004.ps1:74 char:1
++ git diff lib/reports.js 2>&1 | Out-File -Encoding utf8 reports-diff.t ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (warning: in the... Git touches it:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+diff --git a/lib/reports.js b/lib/reports.js
+index 1ee7abd..57f820c 100644
+--- a/lib/reports.js
++++ b/lib/reports.js
+@@ -1,5 +1,5 @@
+ const pool = require('../database/pool');
+-const { getDateParams, categorizeOrder, categorizeForTitleOfficer, categorizeForEscrow } = require('./business-logic');
++const { getDateParams } = require('./business-logic');
+ 
+ // ============================================
+ // SHARED: Title Officer ΓåÆ Branch Mapping
+@@ -39,6 +39,57 @@ function getBranchFromFileNumber(fileNumber) {
+   }
+ }
+ 
++function sumTitleUw(order) {
++  return (parseFloat(order.title_revenue) || 0) + (parseFloat(order.underwriter_revenue) || 0);
++}
++
++function sumTitleUwTsg(order) {
++  return sumTitleUw(order) + (parseFloat(order.tsg_revenue) || 0);
++}
++
++/** Title Officer report: Purchase vs Refinance column (T&E uses trans_type when category is Escrow). */
++function titleOfficerPurchaseRefiBucket(order) {
++  const tr = sumTitleUw(order);
++  if (tr <= 0) return null;
++  const cat = order.category;
++  if (cat === 'Purchase') return 'Purchase';
++  if (cat === 'Refinance') return 'Refinance';
++  if (cat === 'Escrow' || cat === 'Other' || cat === 'Unknown') {
++    const tt = (order.trans_type || '').toLowerCase().trim();
++    if (tt === 'refinance') return 'Refinance';
++    return 'Purchase';
++  }
++  return null;
++}
++
++/** Title Revenue tab: Purchase | Refinance | TSG (revenue = title + UW + TSG portions). */
++function dailyTitleRevenueBucket(order) {
++  const rev = sumTitleUwTsg(order);
++  if (rev <= 0) return null;
++  const cat = order.category;
++  if (cat === 'TSG') return 'TSG';
++  if (cat === 'Purchase') return 'Purchase';
++  if (cat === 'Refinance') return 'Refinance';
++  if (cat === 'Escrow' || cat === 'Other' || cat === 'Unknown') {
++    const tt = (order.trans_type || '').toLowerCase().trim();
++    if (tt === 'refinance') return 'Refinance';
++    return 'Purchase';
++  }
++  return null;
++}
++
++/** Open-order row ΓåÆ same columns as Title Revenue (excludes Escrow-only files). */
++function dailyOpenOrderBucket(row) {
++  const ot = (row.order_type || '').toLowerCase().trim();
++  if (ot === 'trustee sale guarantee') return 'TSG';
++  if (ot === 'title only' || ot === 'title & escrow') {
++    const tt = (row.trans_type || '').toLowerCase().trim();
++    if (tt === 'refinance') return 'Refinance';
++    return 'Purchase';
++  }
++  return null;
++}
++
+ // ============================================
+ // REPORT 1: DAILY REVENUE (Branch Analytics)
+ // ============================================
+@@ -82,7 +133,7 @@ async function dailyRevenue(month, year) {
+     [priorMonth]
+   );
+   
+-  // Categories for Daily Revenue (Escrow excluded ΓÇö has its own report)
++  // Columns: Purchase / Refinance / TSG (closed rows = any order with title+UW+TSG revenue; T&E title portion included)
+   const categories = ['Purchase', 'Refinance', 'TSG'];
+   
+   // Dynamically build branch set from officer mapping + data
+@@ -102,77 +153,66 @@ async function dailyRevenue(month, year) {
+     }
+   }
+   
+-  // Process current month CLOSED orders (from order_summary)
+-  // Escrow excluded ΓÇö it has its own dedicated Escrow Production report
++  // Process current month CLOSED orders ΓÇö title + UW + TSG revenue only (T&E title portion included; not full total_revenue)
+   for (const order of currentOrders) {
+-    if (order.category === 'Escrow') continue;
++    const cat = dailyTitleRevenueBucket(order);
++    if (!cat) continue;
+     const branch = getBranchForOrder(order, officerBranchMap);
+-    const cat = order.category;
+-    if (!categories.includes(cat)) continue;
+-    
++    const rev = sumTitleUwTsg(order);
+     ensureBranch(branch);
+     const bucket = report[branch][cat];
+     
+     if (order.transaction_date) {
+       const txDate = order.transaction_date.toISOString().split('T')[0];
+       
+-      // MTD closed
+       if (txDate >= dates.mtdStart && txDate <= dates.mtdEnd) {
+         bucket.mtd_closed++;
+-        bucket.mtd_rev += parseFloat(order.total_revenue);
++        bucket.mtd_rev += rev;
+       }
+       
+-      // Today closed (yesterday)
+       if (dates.isCurrentMonth && txDate === dates.yesterday) {
+         bucket.today_closed++;
+-        bucket.today_rev += parseFloat(order.total_revenue);
++        bucket.today_rev += rev;
+       }
+     }
+   }
+   
+-  // Process prior month CLOSED orders (from order_summary)
+-  // Escrow excluded ΓÇö it has its own dedicated Escrow Production report
+   for (const order of priorOrders) {
+-    if (order.category === 'Escrow') continue;
++    const cat = dailyTitleRevenueBucket(order);
++    if (!cat) continue;
+     const branch = getBranchForOrder(order, officerBranchMap);
+-    const cat = order.category;
+-    if (!categories.includes(cat)) continue;
+-    
++    const rev = sumTitleUwTsg(order);
+     ensureBranch(branch);
+     const bucket = report[branch][cat];
+     
+     if (order.transaction_date) {
+       bucket.prior_closed++;
+-      bucket.prior_rev += parseFloat(order.total_revenue);
++      bucket.prior_rev += rev;
+     }
+   }
+   
+-  // Process OPEN order counts (from open_orders table, branch from officer mapping)
+-  // Escrow excluded ΓÇö it has its own dedicated Escrow Production report
++  // OPEN counts ΓÇö Title only, Title & Escrow (Purchase/Refi columns), TSG; Escrow-only excluded
+   for (const row of currentOpenRows) {
+-    if (row.category === 'Escrow') continue;
++    const cat = dailyOpenOrderBucket(row);
++    if (!cat) continue;
+     const branch = getBranchForOrder(row, officerBranchMap);
+-    const cat = row.category;
+-    if (!categories.includes(cat)) continue;
+     ensureBranch(branch);
+     report[branch][cat].mtd_open++;
+   }
+   
+   for (const row of todayOpenRows) {
+-    if (row.category === 'Escrow') continue;
+     if (!dates.isCurrentMonth) continue;
++    const cat = dailyOpenOrderBucket(row);
++    if (!cat) continue;
+     const branch = getBranchForOrder(row, officerBranchMap);
+-    const cat = row.category;
+-    if (!categories.includes(cat)) continue;
+     ensureBranch(branch);
+     report[branch][cat].today_open++;
+   }
+   
+   for (const row of priorOpenRows) {
+-    if (row.category === 'Escrow') continue;
++    const cat = dailyOpenOrderBucket(row);
++    if (!cat) continue;
+     const branch = getBranchForOrder(row, officerBranchMap);
+-    const cat = row.category;
+-    if (!categories.includes(cat)) continue;
+     ensureBranch(branch);
+     report[branch][cat].prior_open++;
+   }
+@@ -477,8 +517,8 @@ async function r14Ranking(month, year) {
+ // REPORT 4: TITLE OFFICER PRODUCTION
+ // ============================================
+ // Title officer closed orders grouped by officer's HOME BRANCH (from title_officer_branches table)
+-// Shows only title revenue (title_revenue + underwriter_revenue), excludes escrow & TSG revenue
+-// Purchase & Refinance categories ONLY
++// Revenue = title_revenue + underwriter_revenue only. Includes any closed order with that revenue > 0
++// (Purchase, Refinance, and Title & Escrow ΓÇö bucketed into Purchase/Refi columns via trans_type when needed).
+ 
+ async function titleOfficerProduction(month, year) {
+   const dates = getDateParams(month, year);
+@@ -496,32 +536,29 @@ async function titleOfficerProduction(month, year) {
+   // Track unknown officers we've already warned about (avoid duplicate logs)
+   const warnedOfficers = new Set();
+   
+-  // Only Purchase and Refinance orders
+   const { rows: currentOrders } = await pool.query(
+     `SELECT * FROM order_summary WHERE fetch_month = $1 AND transaction_date IS NOT NULL
+-     AND category IN ('Purchase', 'Refinance')`,
++     AND (COALESCE(title_revenue, 0) + COALESCE(underwriter_revenue, 0)) > 0`,
+     [currentMonth]
+   );
+   const { rows: priorOrders } = await pool.query(
+     `SELECT * FROM order_summary WHERE fetch_month = $1 AND transaction_date IS NOT NULL
+-     AND category IN ('Purchase', 'Refinance')`,
++     AND (COALESCE(title_revenue, 0) + COALESCE(underwriter_revenue, 0)) > 0`,
+     [priorMonth]
+   );
+   
+-  // Closing ratio: 4-month window
+-  // Created = orders opened in the window (from open_orders, Purchase & Refinance only)
++  // Closing ratio: 4-month window ΓÇö title-side opens (Title only + Title & Escrow)
+   const { rows: createdInWindow } = await pool.query(
+     `SELECT title_officer, COUNT(*) as cnt FROM open_orders 
+      WHERE received_date >= $1 AND received_date <= $2
+-     AND category IN ('Purchase', 'Refinance')
++     AND order_type IN ('Title only', 'Title & Escrow')
+      GROUP BY title_officer`,
+     [dates.closingRatioStart, dates.closingRatioEnd]
+   );
+-  // Closed = orders with revenue in the window (from order_summary, Purchase & Refinance only)
+   const { rows: closedInWindow } = await pool.query(
+     `SELECT title_officer, COUNT(*) as cnt FROM order_summary 
+      WHERE transaction_date >= $1 AND transaction_date <= $2
+-     AND category IN ('Purchase', 'Refinance')
++     AND (COALESCE(title_revenue, 0) + COALESCE(underwriter_revenue, 0)) > 0
+      GROUP BY title_officer`,
+     [dates.closingRatioStart, dates.closingRatioEnd]
+   );
+@@ -574,7 +611,8 @@ async function titleOfficerProduction(month, year) {
+     const officer = order.title_officer || 'Unassigned';
+     const branch = getOfficerBranch(officer);
+     
+-    const cat = order.category;
++    const cat = titleOfficerPurchaseRefiBucket(order);
++    if (!cat) continue;
+     const rev = getTitleRevenue(order);
+     
+     const entry = ensureOfficer(branch, officer);
+@@ -597,7 +635,8 @@ async function titleOfficerProduction(month, year) {
+     const officer = order.title_officer || 'Unassigned';
+     const branch = getOfficerBranch(officer);
+     
+-    const cat = order.category;
++    const cat = titleOfficerPurchaseRefiBucket(order);
++    if (!cat) continue;
+     const rev = getTitleRevenue(order);
+     
+     const entry = ensureOfficer(branch, officer);
+@@ -649,7 +688,7 @@ async function titleOfficerProduction(month, year) {
+ // ============================================
+ // REPORT 5: ESCROW PRODUCTION
+ // ============================================
+-// Escrow orders by sales rep by branch - "Title & Escrow" only
++// Escrow fee revenue by sales rep by branch ΓÇö any order with escrow_revenue > 0 (Title & Escrow + Escrow only)
+ 
+ async function escrowProduction(month, year) {
+   const dates = getDateParams(month, year);
+@@ -657,32 +696,28 @@ async function escrowProduction(month, year) {
+   const priorMonthDate = new Date(year, month - 2, 1);
+   const priorMonth = `${priorMonthDate.getFullYear()}-${String(priorMonthDate.getMonth() + 1).padStart(2, '0')}`;
+   
+-  // Only Escrow category orders
+   const { rows: currentOrders } = await pool.query(
+     `SELECT * FROM order_summary WHERE fetch_month = $1 AND transaction_date IS NOT NULL
+-     AND category = 'Escrow'`,
++     AND COALESCE(escrow_revenue, 0) > 0`,
+     [currentMonth]
+   );
+   const { rows: priorOrders } = await pool.query(
+     `SELECT * FROM order_summary WHERE fetch_month = $1 AND transaction_date IS NOT NULL
+-     AND category = 'Escrow'`,
++     AND COALESCE(escrow_revenue, 0) > 0`,
+     [priorMonth]
+   );
+   
+-  // Closing ratio: 4-month window
+-  // Created = escrow orders opened in the window (from open_orders table)
+   const { rows: createdInWindow } = await pool.query(
+     `SELECT sales_rep, COUNT(*) as cnt FROM open_orders 
+      WHERE received_date >= $1 AND received_date <= $2
+-     AND category = 'Escrow'
++     AND order_type IN ('Title & Escrow', 'Escrow Only')
+      GROUP BY sales_rep`,
+     [dates.closingRatioStart, dates.closingRatioEnd]
+   );
+-  // Closed = escrow orders with revenue in the window (from order_summary table)
+   const { rows: closedInWindow } = await pool.query(
+     `SELECT sales_rep, COUNT(*) as cnt FROM order_summary 
+      WHERE transaction_date >= $1 AND transaction_date <= $2
+-     AND category = 'Escrow'
++     AND COALESCE(escrow_revenue, 0) > 0
+      GROUP BY sales_rep`,
+     [dates.closingRatioStart, dates.closingRatioEnd]
+   );
+@@ -703,32 +738,33 @@ async function escrowProduction(month, year) {
+     return report[branch][rep];
+   }
+   
+-  // Current month ΓÇö branch from file number suffix
++  // Current month ΓÇö branch from file number suffix; revenue = escrow fees only
+   for (const order of currentOrders) {
+     const branch = getBranchFromFileNumber(order.file_number);
+     const rep = order.sales_rep || 'Unassigned';
++    const esc = parseFloat(order.escrow_revenue) || 0;
+     
+     const entry = ensureRep(branch, rep);
+     const txDate = order.transaction_date.toISOString().split('T')[0];
+     
+     if (txDate >= dates.mtdStart && txDate <= dates.mtdEnd) {
+       entry.mtd_cnt++;
+-      entry.mtd_rev += parseFloat(order.total_revenue);
++      entry.mtd_rev += esc;
+     }
+     if (dates.isCurrentMonth && txDate === dates.yesterday) {
+       entry.today_cnt++;
+-      entry.today_rev += parseFloat(order.total_revenue);
++      entry.today_rev += esc;
+     }
+   }
+   
+-  // Prior month ΓÇö branch from file number suffix
+   for (const order of priorOrders) {
+     const branch = getBranchFromFileNumber(order.file_number);
+     const rep = order.sales_rep || 'Unassigned';
++    const esc = parseFloat(order.escrow_revenue) || 0;
+     
+     const entry = ensureRep(branch, rep);
+     entry.prior_cnt++;
+-    entry.prior_rev += parseFloat(order.total_revenue);
++    entry.prior_rev += esc;
+   }
+   
+   // Closing ratio: build map from two separate populations

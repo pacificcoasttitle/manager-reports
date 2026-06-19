@@ -1448,6 +1448,32 @@ app.post('/api/email/officer-emails', async (req, res) => {
 });
 
 // ============================================
+// PER-OFFICER EMAILS (escrow officers — SCAFFOLDING, preview + test only, NOT wired into cron)
+// ============================================
+const { buildEscrowOfficerEmailHtml, sendEscrowOfficerEmailsTest } = require('./lib/escrow-officer-email');
+
+// Preview a single escrow officer's email HTML (no send)
+app.get('/api/email/escrow-officer-preview/:officerName', async (req, res) => {
+  try {
+    const { html } = await buildEscrowOfficerEmailHtml(decodeURIComponent(req.params.officerName));
+    res.set('Content-Type', 'text/html').send(html);
+  } catch (err) {
+    res.status(500).send('Error: ' + err.message);
+  }
+});
+
+// Send a TEST batch — every active escrow officer's email goes to one test address
+app.post('/api/email/escrow-officer-emails/test', async (req, res) => {
+  try {
+    const testEmail = req.body.email || 'ghernandez@pct.com';
+    const results = await sendEscrowOfficerEmailsTest(testEmail);
+    res.json({ success: true, sentTo: testEmail, results });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================
 // PER-MANAGER EMAILS (sales managers — each sees only their assigned reps)
 // ============================================
 const { buildManagerEmailHtml, sendManagerEmails, sendManagerEmailsTest } = require('./lib/manager-email');
