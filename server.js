@@ -763,8 +763,10 @@ app.get('/api/td/rep/:repName', async (req, res) => {
       pool.query(`
         SELECT
           CASE
-            WHEN LOWER(trans_type) = 'purchase' THEN 'purchase'
-            WHEN LOWER(trans_type) = 'refinance' THEN 'refinance'
+            WHEN category = 'Purchase' THEN 'purchase'
+            WHEN category = 'Refinance' THEN 'refinance'
+            WHEN category = 'Escrow' THEN 'escrow'
+            WHEN category = 'TSG' THEN 'tsg'
             ELSE 'other'
           END as type,
           COUNT(*)::int as count
@@ -813,9 +815,14 @@ app.get('/api/td/rep/:repName', async (req, res) => {
     const created = parseInt(ratio.created_4m) || 0;
     const closed = parseInt(ratio.closed_4m) || 0;
 
+    // Categorized identically to closingsByType (open_orders.category, same
+    // categorizeOrder() logic as closings). 'other' kept as a true residual
+    // (Unknown category — NULL order_type, etc.) so buckets sum to mtd.opens.
     const openingsByType = {
       purchase: { count: 0 },
       refinance: { count: 0 },
+      escrow: { count: 0 },
+      tsg: { count: 0 },
       other: { count: 0 },
     };
     openTypeResult.rows.forEach(r => {
@@ -832,6 +839,13 @@ app.get('/api/td/rep/:repName', async (req, res) => {
     const mtdOpens = parseInt(openResult.rows[0].mtd_opens) || 0;
     const mtdClosed = parseInt(mtd.mtd_closed) || 0;
     const projectCount = (value) => (worked > 0 ? Math.round((value / worked) * totalWd) : 0);
+
+    // Reconciliation guard: openingsByType buckets must sum to mtd.opens
+    const openTypeSum = openingsByType.purchase.count + openingsByType.refinance.count
+      + openingsByType.escrow.count + openingsByType.tsg.count + openingsByType.other.count;
+    if (openTypeSum !== mtdOpens) {
+      console.warn(`[td/rep] ${repName}: openingsByType sums to ${openTypeSum}, expected mtd.opens ${mtdOpens}`);
+    }
 
     const repTitleRev = parseFloat(mtd.mtd_title_stream) || 0;
     const repCommEscrow = parseFloat(mtd.mtd_comm_escrow) || 0;
