@@ -1450,7 +1450,7 @@ app.post('/api/email/officer-emails', async (req, res) => {
 // ============================================
 // PER-OFFICER EMAILS (escrow officers — SCAFFOLDING, preview + test only, NOT wired into cron)
 // ============================================
-const { buildEscrowOfficerEmailHtml, sendEscrowOfficerEmailsTest } = require('./lib/escrow-officer-email');
+const { buildEscrowOfficerEmailHtml, sendEscrowOfficerEmails, sendEscrowOfficerEmailsTest } = require('./lib/escrow-officer-email');
 
 // Preview a single escrow officer's email HTML (no send)
 app.get('/api/email/escrow-officer-preview/:officerName', async (req, res) => {
@@ -1467,6 +1467,32 @@ app.post('/api/email/escrow-officer-emails/test', async (req, res) => {
   try {
     const testEmail = req.body.email || 'ghernandez@pct.com';
     const results = await sendEscrowOfficerEmailsTest(testEmail);
+    res.json({ success: true, sentTo: testEmail, results });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================
+// ESCROW MANAGER ROLLUP (team commissionable rollup to the escrow manager)
+// ============================================
+const { buildEscrowManagerEmailHtml, sendEscrowManagerEmails, sendEscrowManagerEmailsTest } = require('./lib/escrow-manager-email');
+
+// Preview the escrow manager rollup HTML (no send)
+app.get('/api/email/escrow-manager-preview/:managerName', async (req, res) => {
+  try {
+    const { html } = await buildEscrowManagerEmailHtml(decodeURIComponent(req.params.managerName));
+    res.set('Content-Type', 'text/html').send(html);
+  } catch (err) {
+    res.status(500).send('Error: ' + err.message);
+  }
+});
+
+// Send a TEST batch — every active escrow manager's rollup goes to one test address
+app.post('/api/email/escrow-manager-emails/test', async (req, res) => {
+  try {
+    const testEmail = req.body.email || 'ghernandez@pct.com';
+    const results = await sendEscrowManagerEmailsTest(testEmail);
     res.json({ success: true, sentTo: testEmail, results });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1850,11 +1876,57 @@ cron.schedule('0 5 * * *', async () => {
       `, [err.message]).catch(() => {});
     }
   }
+
+  // Escrow officer emails — gated by app_settings.escrow_officer_emails_enabled
+  const { rows: escOffEnabled } = await pool.query("SELECT value FROM app_settings WHERE key = 'escrow_officer_emails_enabled'");
+  if (escOffEnabled[0]?.value !== 'true') {
+    console.log('Escrow officer emails disabled — skipping');
+  } else {
+    try {
+      const r = await sendEscrowOfficerEmails();
+      const sent = r.filter(x => x.sent).length;
+      console.log(`Escrow officer emails sent: ${sent}/${r.length}`);
+      r.forEach(x => { if (!x.sent) console.error(`  FAILED: ${x.officer} — ${x.error || x.reason}`); });
+      await pool.query(`
+        INSERT INTO import_log (import_type, records_imported, success, triggered_by)
+        VALUES ('escrow_officer_emails', $1, true, 'cron')
+      `, [sent]).catch(() => {});
+    } catch (err) {
+      console.error('Escrow officer emails FAILED:', err.message);
+      await pool.query(`
+        INSERT INTO import_log (import_type, records_imported, success, error_message, triggered_by)
+        VALUES ('escrow_officer_emails', 0, false, $1, 'cron')
+      `, [err.message]).catch(() => {});
+    }
+  }
+
+  // Escrow manager rollup — gated by app_settings.escrow_manager_emails_enabled
+  const { rows: escMgrEnabled } = await pool.query("SELECT value FROM app_settings WHERE key = 'escrow_manager_emails_enabled'");
+  if (escMgrEnabled[0]?.value !== 'true') {
+    console.log('Escrow manager emails disabled — skipping');
+  } else {
+    try {
+      const r = await sendEscrowManagerEmails();
+      const sent = r.filter(x => x.sent).length;
+      console.log(`Escrow manager emails sent: ${sent}/${r.length}`);
+      r.forEach(x => { if (!x.sent) console.error(`  FAILED: ${x.manager} — ${x.error || x.reason}`); });
+      await pool.query(`
+        INSERT INTO import_log (import_type, records_imported, success, triggered_by)
+        VALUES ('escrow_manager_emails', $1, true, 'cron')
+      `, [sent]).catch(() => {});
+    } catch (err) {
+      console.error('Escrow manager emails FAILED:', err.message);
+      await pool.query(`
+        INSERT INTO import_log (import_type, records_imported, success, error_message, triggered_by)
+        VALUES ('escrow_manager_emails', 0, false, $1, 'cron')
+      `, [err.message]).catch(() => {});
+    }
+  }
 }, {
   timezone: 'America/Los_Angeles'
 });
 
-console.log('Officer + rep + manager emails scheduled: 5:00 AM Pacific daily');
+console.log('Officer + rep + manager + escrow officer + escrow manager emails scheduled: 5:00 AM Pacific daily');
 
 // ============================================
 // START SERVER
