@@ -1814,31 +1814,31 @@ console.log('Nightly import cron scheduled (checks every minute, runs at configu
 // already been imported by the prior night's 9 PM run, so the data is complete.
 // Gated by app_settings.officer_emails_enabled.
 cron.schedule('0 5 * * *', async () => {
-  console.log('=== OFFICER EMAILS (5AM) ===', new Date().toISOString());
+  console.log('=== 5 AM EMAILS START ===', new Date().toISOString());
 
+  // Title officer emails — own independent block (no early return; other types unaffected)
   const { rows } = await pool.query("SELECT value FROM app_settings WHERE key = 'officer_emails_enabled'");
-  if (rows[0]?.value !== 'true') {
-    console.log('Officer emails disabled — skipping');
-    return;
-  }
-
-  try {
-    const results = await sendOfficerEmails();
-    const sent = results.filter(r => r.sent).length;
-    console.log(`Officer emails sent: ${sent}/${results.length}`);
-    results.forEach(r => {
-      if (!r.sent) console.error(`  FAILED: ${r.officer} — ${r.error}`);
-    });
-    await pool.query(`
-      INSERT INTO import_log (import_type, records_imported, success, triggered_by)
-      VALUES ('officer_emails', $1, true, 'cron')
-    `, [sent]).catch(() => {});
-  } catch (err) {
-    console.error('Officer emails FAILED:', err.message);
-    await pool.query(`
-      INSERT INTO import_log (import_type, records_imported, success, error_message, triggered_by)
-      VALUES ('officer_emails', 0, false, $1, 'cron')
-    `, [err.message]).catch(() => {});
+  if (rows[0]?.value === 'true') {
+    try {
+      const results = await sendOfficerEmails();
+      const sent = results.filter(r => r.sent).length;
+      console.log(`Officer emails sent: ${sent}/${results.length}`);
+      results.forEach(r => {
+        if (!r.sent) console.error(`  FAILED: ${r.officer} — ${r.error}`);
+      });
+      await pool.query(`
+        INSERT INTO import_log (import_type, records_imported, success, triggered_by)
+        VALUES ('officer_emails', $1, true, 'cron')
+      `, [sent]).catch(() => {});
+    } catch (err) {
+      console.error('Officer emails FAILED:', err.message);
+      await pool.query(`
+        INSERT INTO import_log (import_type, records_imported, success, error_message, triggered_by)
+        VALUES ('officer_emails', 0, false, $1, 'cron')
+      `, [err.message]).catch(() => {});
+    }
+  } else {
+    console.log('Title officer emails disabled — skipping (other emails unaffected)');
   }
 
   // Rep emails — gated by app_settings.rep_emails_enabled (independent of officer flag)
@@ -1936,6 +1936,8 @@ cron.schedule('0 5 * * *', async () => {
       `, [err.message]).catch(() => {});
     }
   }
+
+  console.log('=== 5 AM EMAILS COMPLETE ===', new Date().toISOString());
 }, {
   timezone: 'America/Los_Angeles'
 });
