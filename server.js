@@ -1757,8 +1757,9 @@ cron.schedule('* * * * *', async () => {
 
     console.log('=== NIGHTLY IMPORT STARTED ===', new Date().toISOString());
 
-    const today = new Date();
-    const yearMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+    // Anchor to Pacific time (matches the emails' date logic) so the month never
+    // flips a day early relative to Pacific — the root cause of the month-end drop.
+    const yearMonth = getCurrentYearMonth();
     const firstOfMonth = `${yearMonth}-01`;
 
     // 1. Import Revenue (current month)
@@ -1777,6 +1778,46 @@ cron.schedule('* * * * *', async () => {
       console.log(`Cron open orders: ${openResult.inserted} orders for ${yearMonth}`);
     } catch (err) {
       console.error('Cron open orders FAILED:', err.message);
+    }
+
+    // 2b. Prior-month sweep: on the first 3 days of a month, re-finalize the prior
+    // month so its last business day is captured (the current-month anchor abandons
+    // it on the 1st). UNCONDITIONAL — do not try to detect "missing" days; a calendar
+    // gap can be a legitimate holiday lull (see Nov 2025). Idempotency (delete+reinsert
+    // by fetch_month) makes a redundant re-fetch a safe no-op, so running it 3 mornings
+    // running is harmless — later runs pick up any late-posting corrections.
+    const pacificNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
+    const dayOfMonth = pacificNow.getDate();
+    if (dayOfMonth <= 3) {
+      const priorYearMonth = getPriorMonth(yearMonth);
+      try {
+        console.log(`Prior-month sweep: re-finalizing ${priorYearMonth}`);
+        await logImport('revenue', priorYearMonth, 'cron-sweep', () => fetchAndStore(priorYearMonth));
+        console.log(`Prior-month sweep complete: ${priorYearMonth}`);
+      } catch (err) {
+        // Don't let a sweep failure break the current-month import
+        console.error(`Prior-month sweep FAILED for ${priorYearMonth}:`, err.message);
+      }
+
+      // Guardrail (informational only — a zero-close last weekday can be a legitimate
+      // holiday, e.g. the Friday after Thanksgiving; this just surfaces it for a human).
+      try {
+        const { rows } = await pool.query(`
+          SELECT MAX(transaction_date::date) as last_close,
+            (date_trunc('month', ($1||'-01')::date) + interval '1 month - 1 day')::date as month_end
+          FROM order_summary WHERE fetch_month = $1
+        `, [priorYearMonth]);
+        const lastClose = rows[0]?.last_close;
+        const monthEnd = rows[0]?.month_end;
+        if (lastClose && monthEnd) {
+          const gap = Math.round((new Date(monthEnd) - new Date(lastClose)) / 86400000);
+          if (gap >= 1) {
+            console.warn(`GUARDRAIL: ${priorYearMonth} last close ${lastClose} is ${gap} day(s) before month-end ${monthEnd}. Verify this is a holiday/weekend lull, not a missing import.`);
+          }
+        }
+      } catch (err) {
+        console.error(`Prior-month guardrail check FAILED for ${priorYearMonth}:`, err.message);
+      }
     }
 
     // 3. Send daily email report (after data is fresh)
