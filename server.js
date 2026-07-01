@@ -1676,6 +1676,39 @@ app.post('/api/email/rep-emails', async (req, res) => {
   }
 });
 
+// ---- Month-end rep recap (completed-month "Final Numbers") ----
+const { buildRepRecapHtml, sendRepRecaps, sendRepRecapsTest } = require('./lib/rep-recap-email');
+
+// Preview a rep's recap for a given month (no send)
+app.get('/api/email/rep-recap-preview/:repName/:month', async (req, res) => {
+  try {
+    const { html } = await buildRepRecapHtml(decodeURIComponent(req.params.repName), req.params.month);
+    res.set('Content-Type', 'text/html').send(html);
+  } catch (err) {
+    res.status(500).send('Error: ' + err.message);
+  }
+});
+
+// Test batch — every eligible rep's recap goes to one test address (skips $0 reps)
+app.post('/api/email/rep-recap/test', async (req, res) => {
+  try {
+    const results = await sendRepRecapsTest(req.body.month, req.body.email || 'ghernandez@pct.com');
+    res.json({ success: true, results });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Manual one-time LIVE send of a completed-month recap (skips $0 reps)
+app.post('/api/email/rep-recap/send', async (req, res) => {
+  try {
+    const results = await sendRepRecaps(req.body.month);
+    res.json({ success: true, sent: results.filter(r => r.sent).length, results });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Rep email recipients for the Settings UI (from rep_manager_assignments)
 app.get('/api/admin/rep-emails', async (req, res) => {
   try {
@@ -1984,6 +2017,42 @@ cron.schedule('0 5 * * *', async () => {
 });
 
 console.log('Officer + rep + manager + escrow officer + escrow manager emails scheduled: 5:00 AM Pacific daily');
+
+// ============================================
+// MONTH-END REP RECAP CRON: 1st of month, 7:30 AM Pacific
+// ============================================
+// Separate from the 5 AM daily. Recaps the just-completed prior month.
+// Flag-gated (rep_recap_emails_enabled); $0-total reps skipped inside sendRepRecaps.
+cron.schedule('30 7 1 * *', async () => {
+  const enabled = await pool.query("SELECT value FROM app_settings WHERE key = 'rep_recap_emails_enabled'");
+  if (enabled.rows[0]?.value !== 'true') {
+    console.log('Rep recap disabled — skipping');
+    return;
+  }
+  // Month to recap = prior month (Pacific)
+  const pac = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
+  const prior = new Date(pac.getFullYear(), pac.getMonth() - 1, 1);
+  const recapMonth = `${prior.getFullYear()}-${String(prior.getMonth() + 1).padStart(2, '0')}`;
+  try {
+    const r = await sendRepRecaps(recapMonth);
+    const sent = r.filter(x => x.sent).length;
+    console.log(`Rep recaps for ${recapMonth}: ${sent} sent`);
+    await pool.query(
+      `INSERT INTO import_log (import_type, records_imported, success, triggered_by) VALUES ('rep_recap_emails', $1, true, 'cron')`,
+      [sent]
+    ).catch(() => {});
+  } catch (err) {
+    console.error('Rep recaps FAILED:', err.message);
+    await pool.query(
+      `INSERT INTO import_log (import_type, records_imported, success, error_message, triggered_by) VALUES ('rep_recap_emails', 0, false, $1, 'cron')`,
+      [err.message]
+    ).catch(() => {});
+  }
+}, {
+  timezone: 'America/Los_Angeles'
+});
+
+console.log('Rep month-end recap scheduled: 1st of month, 7:30 AM Pacific');
 
 // ============================================
 // START SERVER
