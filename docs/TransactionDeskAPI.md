@@ -82,6 +82,14 @@ GET /api/td/rep/Kevin%20Green?month=2026-02
       "escrow": { "count": 5, "revenue": 4500.00 },
       "tsg": { "count": 2, "revenue": 1000.00 }
     },
+    "productionByBranch": {
+      "Glendale": { "closed": 2, "revenue": 2125.00 },
+      "Orange": { "closed": 12, "revenue": 32015.00 },
+      "Inland Empire": { "closed": 1, "revenue": 6257.00 },
+      "Porterville": { "closed": 0, "revenue": 0 },
+      "TSG": { "closed": 0, "revenue": 0 },
+      "Unassigned": { "closed": 0, "revenue": 0 }
+    },
     "projectedOpens": 69,
     "projectedClosings": 50
   },
@@ -123,6 +131,7 @@ GET /api/td/rep/Kevin%20Green?month=2026-02
 | `mtd.repTotalProduction` | number | `titleRevenue + commissionableEscrow + tsgRevenue`. The rep-facing total. Differs from `mtd.revenue` (full `total_revenue`) by the excluded loan-tie-in amount. Use this for rep-facing displays. |
 | `mtd.revenue` | number | **UNCHANGED** — full company-side `total_revenue` (includes loan tie-in). Existing consumers unaffected. |
 | `mtd.repProductionByDealType` | `{ purchase, refinance, other }` ($) | A second lens on `repTotalProduction`, split by each file's `trans_type` (NOT by revenue stream). Each file's full rep contribution (`title + underwriter + commissionable escrow + tsg`) is bucketed by its `trans_type`; `other` catches TSG and any non-purchase/refi type. `purchase + refinance + other = repTotalProduction`. NOT additive to the hero — a decomposition of it. Distinct from `openingsByType`/`closingsByType` (those are COUNTS by type; this is rep-production DOLLARS). |
+| `mtd.productionByBranch` | `{ Glendale, Orange, Inland Empire, Porterville, TSG, Unassigned }` each `{ closed, revenue }` | Closings split by **branch**, so a manager can see how much of a rep's business landed in each county. Branch is derived from the file-number suffix (`-GLT`/`-OCT`/`-ONT`/`-PRV`/`-TSG`; `99%` and `-TSG` → TSG; everything else → Unassigned) — identical mapping to the Live Data Explorer. `revenue` is full `total_revenue` (same figure as `mtd.revenue`). **All six branch keys are always present, including at `0`** (catch-alls `TSG`/`Unassigned` are never dropped) so the rows always add up. The six `revenue` values sum to `mtd.revenue` and the six `closed` values sum to `mtd.closed` — enforced by a hard reconciliation guard (the endpoint returns `500` rather than ship a split that doesn't tie). Closings only — no openings-by-branch. |
 
 ---
 

@@ -732,7 +732,7 @@ app.get('/api/td/rep/:repName', async (req, res) => {
     const priorMonth = getPriorMonth(month);
     const yesterday = getYesterdayPacific();
 
-    const [mtdResult, ydayResult, openResult, openTypeResult, ydayOpenResult, priorResult, ratioResult, workDayResult, rankResult, totalRepsResult] = await Promise.all([
+    const [mtdResult, ydayResult, openResult, openTypeResult, ydayOpenResult, priorResult, ratioResult, workDayResult, rankResult, totalRepsResult, branchResult] = await Promise.all([
       pool.query(`
         SELECT COUNT(*) as mtd_closed,
                ROUND(COALESCE(SUM(total_revenue),0)::numeric, 2) as mtd_revenue,
@@ -802,7 +802,25 @@ app.get('/api/td/rep/:repName', async (req, res) => {
       pool.query(`
         SELECT COUNT(DISTINCT sales_rep) as total FROM order_summary
         WHERE fetch_month = $1 AND sales_rep IS NOT NULL AND sales_rep != ''
-      `, [month])
+      `, [month]),
+      // Production by branch (closings, total_revenue) — branch derived from the
+      // file-number suffix, identical mapping to the Live Data Explorer's
+      // FILE_BRANCH_CASE. Buckets are guaranteed to sum to mtd.revenue below.
+      pool.query(`
+        SELECT
+          CASE
+            WHEN file_number LIKE '%-GLT' THEN 'Glendale'
+            WHEN file_number LIKE '%-OCT' THEN 'Orange'
+            WHEN file_number LIKE '%-ONT' THEN 'Inland Empire'
+            WHEN file_number LIKE '%-PRV' THEN 'Porterville'
+            WHEN file_number LIKE '%-TSG' OR file_number LIKE '99%' THEN 'TSG'
+            ELSE 'Unassigned'
+          END as branch,
+          COUNT(*)::int as closed,
+          ROUND(COALESCE(SUM(total_revenue),0)::numeric, 2) as revenue
+        FROM order_summary WHERE sales_rep = $1 AND fetch_month = $2
+        GROUP BY 1
+      `, [repName, month])
     ]);
 
     const mtd = mtdResult.rows[0];
@@ -862,6 +880,33 @@ app.get('/api/td/rep/:repName', async (req, res) => {
       console.warn(`[td/rep] ${repName}: repProductionByDealType sums to ${dealTypeSum}, expected repTotalProduction ${repTotalProduction}`);
     }
 
+    // Production by branch (closings, total_revenue). Every branch is seeded so
+    // the catch-all buckets (TSG, Unassigned) are always present even at zero —
+    // managers read these rows line-by-line and subtract, so a silently-absent
+    // bucket would look like missing revenue. Buckets MUST sum to mtd.revenue.
+    const BRANCHES = ['Glendale', 'Orange', 'Inland Empire', 'Porterville', 'TSG', 'Unassigned'];
+    const productionByBranch = {};
+    BRANCHES.forEach(b => { productionByBranch[b] = { closed: 0, revenue: 0 }; });
+    branchResult.rows.forEach(r => {
+      if (productionByBranch[r.branch]) {
+        productionByBranch[r.branch] = { closed: parseInt(r.closed) || 0, revenue: parseFloat(r.revenue) || 0 };
+      }
+    });
+
+    // Hard-fail the reconciliation guard (same intent as openingsByType, enforced):
+    // if the branch buckets don't tie to the headline, surface it rather than ship
+    // a number that's quietly off by a file.
+    const branchRevSum = Math.round(BRANCHES.reduce((s, b) => s + productionByBranch[b].revenue, 0) * 100) / 100;
+    const branchClosedSum = BRANCHES.reduce((s, b) => s + productionByBranch[b].closed, 0);
+    if (Math.abs(branchRevSum - mtdRev) > 0.01 || branchClosedSum !== mtdClosed) {
+      console.error(`[td/rep] ${repName}: productionByBranch reconciliation FAILED — revenue ${branchRevSum} vs mtd.revenue ${mtdRev}, closed ${branchClosedSum} vs mtd.closed ${mtdClosed}`);
+      return res.status(500).json({
+        error: 'productionByBranch failed reconciliation against mtd totals',
+        rep: repName, month,
+        detail: { branchRevSum, mtdRevenue: mtdRev, branchClosedSum, mtdClosed }
+      });
+    }
+
     res.json({
       rep: repName,
       month,
@@ -888,6 +933,7 @@ app.get('/api/td/rep/:repName', async (req, res) => {
         tsgRevenue: repTsgRev,
         repTotalProduction,
         repProductionByDealType,
+        productionByBranch,
       },
       prior: {
         month: priorMonth,
