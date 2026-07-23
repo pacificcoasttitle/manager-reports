@@ -893,18 +893,18 @@ app.get('/api/td/rep/:repName', async (req, res) => {
       }
     });
 
-    // Hard-fail the reconciliation guard (same intent as openingsByType, enforced):
-    // if the branch buckets don't tie to the headline, surface it rather than ship
-    // a number that's quietly off by a file.
+    // Reconciliation guard — DEGRADE, don't fail. The branch buckets must tie to
+    // both mtd.revenue and mtd.closed. If they don't (a genuine data oddity on one
+    // file), we do NOT take down the whole rep page: we replace the branch block
+    // with an explicit unavailable marker and log loudly. A mismatch is thus never
+    // silent (flagged in payload + logs), but managers still get the rest of the
+    // page. The dashboard hides/grays the branch widget when available === false.
     const branchRevSum = Math.round(BRANCHES.reduce((s, b) => s + productionByBranch[b].revenue, 0) * 100) / 100;
     const branchClosedSum = BRANCHES.reduce((s, b) => s + productionByBranch[b].closed, 0);
+    let productionByBranchOut = productionByBranch;
     if (Math.abs(branchRevSum - mtdRev) > 0.01 || branchClosedSum !== mtdClosed) {
-      console.error(`[td/rep] ${repName}: productionByBranch reconciliation FAILED — revenue ${branchRevSum} vs mtd.revenue ${mtdRev}, closed ${branchClosedSum} vs mtd.closed ${mtdClosed}`);
-      return res.status(500).json({
-        error: 'productionByBranch failed reconciliation against mtd totals',
-        rep: repName, month,
-        detail: { branchRevSum, mtdRevenue: mtdRev, branchClosedSum, mtdClosed }
-      });
+      console.error(`[td/rep] ${repName} (${month}): productionByBranch reconciliation FAILED — revenue ${branchRevSum} vs mtd.revenue ${mtdRev}, closed ${branchClosedSum} vs mtd.closed ${mtdClosed}. Degrading branch block; rest of payload unaffected.`);
+      productionByBranchOut = { available: false, reason: 'failed reconciliation against mtd totals' };
     }
 
     res.json({
@@ -933,7 +933,7 @@ app.get('/api/td/rep/:repName', async (req, res) => {
         tsgRevenue: repTsgRev,
         repTotalProduction,
         repProductionByDealType,
-        productionByBranch,
+        productionByBranch: productionByBranchOut,
       },
       prior: {
         month: priorMonth,
