@@ -1490,7 +1490,8 @@ app.get('/api/email/officer-preview/:officerName', async (req, res) => {
 app.post('/api/email/officer-emails/test', async (req, res) => {
   try {
     const testEmail = req.body.email || 'ghernandez@pct.com';
-    const results = await sendOfficerEmailsTest(testEmail);
+    const onlyOfficer = req.body.officer || null; // optional: test a single officer
+    const results = await sendOfficerEmailsTest(testEmail, onlyOfficer);
     res.json({ success: true, sentTo: testEmail, results });
   } catch (err) {
     res.status(500).json({ error: err.message });
