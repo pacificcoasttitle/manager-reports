@@ -24,6 +24,34 @@ async function logImport(importType, month, triggeredBy, fn) {
       INSERT INTO import_log (import_type, month, records_imported, records_deleted, success, duration_ms, triggered_by)
       VALUES ($1, $2, $3, $4, true, $5, $6)
     `, [importType, month, result.inserted || result.unique_orders || 0, result.deleted || 0, duration, triggeredBy]);
+
+    // Tie-in double-entry watch (DOC/LOANS capture, lightest notification path): after a
+    // revenue import, if any file carries tie-in under BOTH ESC-desc and LOANS, its tie-in
+    // was held out of the officer comp base. Surface a one-line warning in the import log
+    // Jerry already reviews — no new email/cron. Silent when count is 0.
+    if (importType === 'revenue' && month) {
+      try {
+        const { rows: cf } = await pool.query(`
+          SELECT COUNT(*)::int AS n FROM (
+            SELECT file_number FROM revenue_line_items
+            WHERE fetch_month = $1
+              AND ((bill_code='ESC' AND LOWER(charge_description) LIKE '%tie%') OR bill_code='LOANS')
+            GROUP BY file_number
+            HAVING COUNT(DISTINCT CASE WHEN bill_code='LOANS' THEN 'L'
+              WHEN bill_code='ESC' AND LOWER(charge_description) LIKE '%tie%' THEN 'E' END) > 1
+          ) x`, [month]);
+        const n = cf[0]?.n || 0;
+        if (n > 0) {
+          console.warn(`TIE-IN CONFLICT: ${month} has ${n} file(s) with tie-in under both ESC and LOANS — tie-in held out, see Discrepancies tab.`);
+          await pool.query(`
+            INSERT INTO import_log (import_type, month, records_imported, success, error_message, triggered_by)
+            VALUES ('tiein_conflict_warning', $1, $2, false, $3, $4)
+          `, [month, n, `${n} file(s) with tie-in under both ESC and LOANS — tie-in held out of officer comp; resolve duplicate in SoftPro (see Discrepancies).`, triggeredBy]).catch(() => {});
+        }
+      } catch (cErr) {
+        console.error(`Tie-in conflict watch failed for ${month}:`, cErr.message);
+      }
+    }
     return result;
   } catch (err) {
     const duration = Date.now() - start;
