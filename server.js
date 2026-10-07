@@ -352,6 +352,19 @@ app.get('/api/reports/daily-excel', async (req, res) => {
       'Content-Disposition',
       `attachment; filename="PCT_Daily_Report_${asOf}.xlsx"`
     );
+    const metadata = buffer.dailyExcelMetadata || {};
+    res.setHeader(
+      'X-PCT-Daily-Excel-Unmatched-Reps',
+      encodeURIComponent(JSON.stringify(metadata.unmatchedReps || []))
+    );
+    res.setHeader(
+      'X-PCT-Daily-Excel-Unmatched-Officers',
+      encodeURIComponent(JSON.stringify(metadata.unmatchedOfficers || []))
+    );
+    res.setHeader(
+      'X-PCT-Daily-Excel-Null-Transaction-Types',
+      String(metadata.nullTransactionTypeCount || 0)
+    );
     res.send(buffer);
   } catch (err) {
     console.error('Daily Excel build error:', err);
