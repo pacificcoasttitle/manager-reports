@@ -8,6 +8,12 @@ const pool = require('./database/pool');
 const { fetchAndStore, fetchOpenOrders, importOpenOrders } = require('./lib/softpro-client');
 const reports = require('./lib/reports');
 const { buildDailyReportHtml, sendDailyReport } = require('./lib/daily-email');
+const {
+  buildDailyExcel,
+  sendDailyExcelTest,
+  pacificDateString,
+  EXCEL_MIME,
+} = require('./lib/daily-excel');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -331,6 +337,34 @@ app.get('/api/reports/reconciliation', async (req, res) => {
       }
     });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Read-only owner workbook proof of concept. It renders existing dashboard data
+// into an in-memory attachment and has no scheduled or production recipient path.
+app.get('/api/reports/daily-excel', async (req, res) => {
+  try {
+    const asOf = req.query.date || pacificDateString();
+    const buffer = await buildDailyExcel(asOf);
+    res.setHeader('Content-Type', EXCEL_MIME);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="PCT_Daily_Report_${asOf}.xlsx"`
+    );
+    res.send(buffer);
+  } catch (err) {
+    console.error('Daily Excel build error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/reports/daily-excel/test', async (req, res) => {
+  try {
+    const result = await sendDailyExcelTest();
+    res.json(result);
+  } catch (err) {
+    console.error('Daily Excel test-send error:', err);
     res.status(500).json({ error: err.message });
   }
 });
