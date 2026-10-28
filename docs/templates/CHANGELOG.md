@@ -38,3 +38,14 @@ No rows were inserted or deleted. No other `pro` formulas were changed.
   `Escrow!BL6`, `Escrow!BO6`, and `Escrow!BR6`.
 
 No rows were inserted or deleted.
+
+## 2026-10-28 — Other County Reps TSG revenue repair
+
+- Corrected `r14!AE82` from `SUM(AB82:AC82)` to `SUM(AB82:AD82)` so TSG
+  revenue routed to the Orange-section `Other County Reps` slot reaches the
+  row total, section total, `pro`, and the Math check.
+- Repointed `pro!E38/F38/K38/L38/Q38/R38` from the Orange-only TSG subtotal
+  (`r14` row 84) to the sum of the Glendale and Orange TSG subtotals
+  (`r14` rows 46 and 84), so `pro` includes companywide TSG production.
+
+No rows were inserted or deleted.

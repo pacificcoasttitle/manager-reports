@@ -10,6 +10,7 @@ const reports = require('./lib/reports');
 const { buildDailyReportHtml, sendDailyReport } = require('./lib/daily-email');
 const {
   buildDailyExcel,
+  sendDailyExcel,
   sendDailyExcelTest,
   pacificDateString,
   EXCEL_MIME,
@@ -379,6 +380,19 @@ app.post('/api/reports/daily-excel/test', async (req, res) => {
   } catch (err) {
     console.error('Daily Excel test-send error:', err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/reports/daily-excel/send', async (req, res) => {
+  const asOf = req.body.date || pacificDateString();
+  try {
+    res.json(await sendDailyExcel(asOf));
+  } catch (err) {
+    console.error('Daily Excel production-send error:', err);
+    res.status(500).json({
+      ...(err.dailyExcelResult || { sent: false, date: asOf, failed_check: err.message }),
+      error: err.message,
+    });
   }
 });
 
@@ -2002,6 +2016,47 @@ cron.schedule('* * * * *', async () => {
 });
 
 console.log('Nightly import cron scheduled (checks every minute, runs at configured time)');
+
+// ============================================
+// DAILY EXCEL CRON: 7:00 AM Pacific, Monday–Friday
+// ============================================
+// The renderer and gate run before recipients are queried or any production
+// attachment is sent. A gate failure alerts Jerry from sendDailyExcel().
+cron.schedule('0 7 * * 1-5', async () => {
+  const asOf = pacificDateString();
+  try {
+    const { rows } = await pool.query(
+      "SELECT value FROM app_settings WHERE key = 'daily_excel_enabled'"
+    );
+    if (rows[0]?.value !== 'true') {
+      console.log(JSON.stringify({
+        event: 'daily_excel_disabled',
+        level: 'info',
+        date: asOf,
+        message: 'daily excel disabled — skipping',
+      }));
+      return;
+    }
+
+    const result = await sendDailyExcel(asOf);
+    console.log(JSON.stringify({
+      event: 'daily_excel_cron_sent',
+      level: 'info',
+      ...result,
+    }));
+  } catch (err) {
+    console.error(JSON.stringify({
+      event: 'daily_excel_cron_failed',
+      level: 'error',
+      date: asOf,
+      error: err.message,
+    }));
+  }
+}, {
+  timezone: 'America/Los_Angeles'
+});
+
+console.log('Daily Excel cron scheduled (7:00 AM Pacific, weekdays, flag-gated)');
 
 // ============================================
 // OFFICER EMAILS CRON: 5:00 AM Pacific daily
