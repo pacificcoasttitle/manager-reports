@@ -70,6 +70,22 @@ function formulaCounts(workbook) {
   }));
 }
 
+function workbookViewState(workbook) {
+  const workbookView = workbook.views?.[0] || {};
+  const activeTab = workbookView.activeTab ?? 0;
+  const activeSheet = workbook.worksheets[activeTab];
+  const pro = workbook.getWorksheet('pro');
+  const proView = pro.views?.[0] || {};
+  return {
+    workbookView,
+    activeTab,
+    activeSheet: activeSheet?.name || null,
+    proView,
+    proActiveCell: proView.activeCell || 'A1',
+    proTopLeftCell: proView.topLeftCell || 'A1',
+  };
+}
+
 function refErrors(workbook) {
   const refs = [];
   for (const sheet of workbook.worksheets) {
@@ -300,6 +316,8 @@ async function main() {
 
   let buildMetadata = null;
   let calcPropertiesBeforeRecalculation = null;
+  let generatedViewState = null;
+  let generatedTabSelectedSheets = null;
   if (options.source) {
     fs.copyFileSync(path.resolve(options.source), workbookPath);
   } else {
@@ -310,6 +328,17 @@ async function main() {
     calcPropertiesBeforeRecalculation = {
       fullCalcOnLoad: /<calcPr\b[^>]*\bfullCalcOnLoad="1"/i.test(workbookXml),
     };
+    const generatedWorkbook = new ExcelJS.Workbook();
+    await generatedWorkbook.xlsx.load(buffer);
+    generatedViewState = workbookViewState(generatedWorkbook);
+    generatedTabSelectedSheets = [];
+    for (let index = 0; index < generatedWorkbook.worksheets.length; index++) {
+      const sheet = generatedWorkbook.worksheets[index];
+      const sheetXml = await zip.file(`xl/worksheets/sheet${sheet.id}.xml`).async('string');
+      if (/<sheetView\b[^>]*\btabSelected="1"/i.test(sheetXml)) {
+        generatedTabSelectedSheets.push(sheet.name);
+      }
+    }
     fs.writeFileSync(workbookPath, buffer);
   }
 
@@ -612,8 +641,23 @@ async function main() {
   }
   const refs = refErrors(workbook);
   if (refs.length) failures.push(`REF errors: ${refs.join(', ')}`);
+  const recalculatedViewState = workbookViewState(workbook);
+  if (generatedViewState
+      && (generatedViewState.activeSheet !== 'pro'
+        || generatedViewState.proActiveCell !== 'A1'
+        || generatedViewState.proTopLeftCell !== 'A1'
+        || generatedTabSelectedSheets.length !== 1
+        || generatedTabSelectedSheets[0] !== 'pro')) {
+    failures.push(`generated workbook view is not pro at A1: ${JSON.stringify(generatedViewState)}`);
+  }
+  if (recalculatedViewState.activeSheet !== 'pro'
+      || recalculatedViewState.proActiveCell !== 'A1'
+      || recalculatedViewState.proTopLeftCell !== 'A1') {
+    failures.push(`recalculated workbook view is not pro at A1: ${JSON.stringify(recalculatedViewState)}`);
+  }
   const r14Freeze = r14.views?.[0] || {};
-  if (r14Freeze.state !== 'frozen' || r14Freeze.xSplit !== 4 || r14Freeze.ySplit !== 6) {
+  if (r14Freeze.state !== 'frozen' || r14Freeze.xSplit !== 4 || r14Freeze.ySplit !== 6
+      || r14Freeze.topLeftCell !== 'E7') {
     failures.push(`r14 freeze pane changed: ${JSON.stringify(r14Freeze)}`);
   }
 
@@ -637,6 +681,9 @@ async function main() {
     formulaCounts: calculatedFormulaCounts,
     masterFormulaCounts,
     refErrors: refs,
+    generatedViewState,
+    generatedTabSelectedSheets,
+    recalculatedViewState,
     r14Freeze,
     calcPropertiesBeforeRecalculation,
     formulaCountsBefore: buildMetadata?.formulaCountsBefore || null,
