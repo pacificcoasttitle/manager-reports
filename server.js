@@ -958,6 +958,9 @@ app.get('/api/td/rep/:repName', async (req, res) => {
     const repCommEscrow = parseFloat(mtd.mtd_comm_escrow) || 0;
     const repTsgRev = parseFloat(mtd.mtd_tsg_stream) || 0;
     const repTotalProduction = Math.round((repTitleRev + repCommEscrow + repTsgRev) * 100) / 100;
+    const projectedRepProduction = worked > 0
+      ? Math.round((repTotalProduction / worked) * totalWd * 100) / 100
+      : 0;
 
     const repProductionByDealType = {
       purchase: parseFloat(mtd.mtd_prod_purchase) || 0,
@@ -1021,6 +1024,7 @@ app.get('/api/td/rep/:repName', async (req, res) => {
         commissionableEscrow: repCommEscrow,
         tsgRevenue: repTsgRev,
         repTotalProduction,
+        projectedRepProduction,
         repProductionByDealType,
         productionByBranch: productionByBranchOut,
       },
