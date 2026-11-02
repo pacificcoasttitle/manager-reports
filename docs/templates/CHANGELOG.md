@@ -39,6 +39,46 @@ No rows were inserted or deleted. No other `pro` formulas were changed.
 
 No rows were inserted or deleted.
 
+## 2026-11-01 — Zero-elapsed projection guards
+
+- Wrapped every `pro` formula that directly references elapsed/total working-day
+  drivers (`$O$1` / `$Q$1`) in `IF($O$1=0,0,<original formula>)`. The 148
+  guarded cells are:
+  - Row 6: `G6`, `H6`, `M6`, `N6`, `S6`, `T6`, `AE6`, `AH6`, `AK6`,
+    `AN6`, `AQ6`, `AT6`, `AW6`, `AZ6`, `BB6`, `BH6`, `BW6`, `BZ6`,
+    `CU6`, `DG6`, `DM6`.
+  - Row 8: `G8`, `H8`, `M8`, `N8`, `S8`.
+  - Rows 9:13: columns `G`, `H`, `M`, `N`, `S` on every row.
+  - Row 16: `M16`, `N16`.
+  - Rows 17:19: columns `G`, `H`, `M`, `N`, `S` on every row.
+  - Rows 22:23: columns `G`, `H`, `M`, `N`, `S` on every row.
+  - Row 26: `G26`, `H26`, `K26`, `M26`, `N26`, `S26`.
+  - Row 27: `G27`, `H27`, `M27`, `N27`, `S27`.
+  - Rows 30:32: columns `G`, `H`, `M`, `N`, `S` on every row.
+  - Row 35: `G35`, `H35`, `K35`, `M35`, `N35`, `S35`.
+  - Rows 36:38: columns `G`, `H`, `M`, `N`, `S` on every row.
+  - Row 41: `G41`, `H41`, `M41`, `S41`.
+  - Row 44: `G44`, `H44`, `M44`, `S44`.
+  - Rows 48:50: columns `G`, `H`, `M`, `N`, `S` on every row.
+- Wrapped every `r14` projection formula that references `$P$1` / `$R$1` in
+  `IF($P$1=0,0,<original formula>)`. The 89 guarded cells are `N9:N45`,
+  `N48:N83`, `N87:N92`, `N94:N101`, and `N134:N135`.
+- A real Excel recalculation of the zero-activity workbook exposed 53 additional
+  `pro` ratio formulas whose MTD count divisor can also be zero. Each was
+  wrapped with its actual divisor, never `IFERROR`, so unrelated errors remain
+  visible:
+  - Revenue-per-close cells: `W6`, `W8:W14`, `W17:W20`, `W22:W23`,
+    `W26:W28`, `W30:W33`, `W35:W36`, `W38:W39`, `W41`, `W47:W51`,
+    `W53`, and `W57`. Each guard names the denominator already present in
+    the formula (`L` on the corresponding row, except `W22`, which names
+    its original `M16` divisor).
+  - Closing-ratio cells: `Z6`, `AA6`, `Z8:AA14`, `Z24:AA24`, and
+    `Z28:AA28`. Each guard names the original `Y`-column divisor.
+- The expressions inside each guard are unchanged. No formula without one of
+  the documented zero-capable elapsed/count divisors was edited.
+
+No rows were inserted or deleted. Formula counts are unchanged.
+
 ## 2026-10-28 — Other County Reps TSG revenue repair
 
 - Corrected `r14!AE82` from `SUM(AB82:AC82)` to `SUM(AB82:AD82)` so TSG

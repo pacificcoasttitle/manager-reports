@@ -9,7 +9,7 @@ const { fetchAndStore, fetchOpenOrders, importOpenOrders } = require('./lib/soft
 const reports = require('./lib/reports');
 const { buildDailyReportHtml, sendDailyReport } = require('./lib/daily-email');
 const {
-  buildDailyExcel,
+  buildVerifiedDailyExcel,
   sendDailyExcel,
   sendDailyExcelTest,
   pacificDateString,
@@ -347,7 +347,7 @@ app.get('/api/reports/reconciliation', async (req, res) => {
 app.get('/api/reports/daily-excel', async (req, res) => {
   try {
     const asOf = req.query.date || pacificDateString();
-    const buffer = await buildDailyExcel(asOf);
+    const buffer = await buildVerifiedDailyExcel(asOf);
     res.setHeader('Content-Type', EXCEL_MIME);
     res.setHeader(
       'Content-Disposition',

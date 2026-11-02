@@ -1,10 +1,13 @@
 const fs = require('fs');
 const path = require('path');
-const { spawnSync } = require('child_process');
 const ExcelJS = require('exceljs');
 const JSZip = require('jszip');
 const pool = require('../database/pool');
 const { buildDailyExcel, MASTER_PATH } = require('../lib/daily-excel');
+const {
+  recalculateWorkbookFile,
+  scanFormulaErrors,
+} = require('../lib/workbook-recalculation');
 
 const R14_INPUT_COLUMNS = ['E','F','G','J','K','L','O','Q','R','S','V','W','X','Z','AA','AB','AC','AD','AH','AI','AJ','AL','AM'];
 const R14_SLOT_ROWS = [
@@ -97,54 +100,6 @@ function refErrors(workbook) {
     }));
   }
   return refs;
-}
-
-function run(command, commandArgs) {
-  const result = spawnSync(command, commandArgs, { encoding: 'utf8' });
-  if (result.error || result.status !== 0) {
-    throw new Error(
-      `${command} failed: ${result.error?.message || result.stderr || result.stdout || `exit ${result.status}`}`
-    );
-  }
-}
-
-function commandWorks(command) {
-  const result = spawnSync(command, ['--version'], { encoding: 'utf8' });
-  return !result.error && result.status === 0;
-}
-
-function recalculateWithLibreOffice(workbookPath, command) {
-  const root = path.dirname(workbookPath);
-  const inputDir = path.join(root, 'libreoffice-input');
-  const outputDir = path.join(root, 'libreoffice-output');
-  fs.mkdirSync(inputDir, { recursive: true });
-  fs.mkdirSync(outputDir, { recursive: true });
-  const input = path.join(inputDir, path.basename(workbookPath));
-  fs.copyFileSync(workbookPath, input);
-  run(command, ['--headless', '--convert-to', 'xlsx', '--outdir', outputDir, input]);
-  const output = path.join(outputDir, path.basename(workbookPath));
-  if (!fs.existsSync(output)) throw new Error('LibreOffice did not produce a recalculated workbook');
-  fs.copyFileSync(output, workbookPath);
-}
-
-function recalculate(workbookPath) {
-  if (process.platform === 'win32') {
-    const script = path.join(__dirname, 'recalculate-daily-excel.ps1');
-    run('powershell.exe', [
-      '-NoProfile', '-ExecutionPolicy', 'Bypass',
-      '-File', script, '-WorkbookPath', workbookPath,
-    ]);
-    return 'Microsoft Excel CalculateFullRebuild';
-  }
-  for (const command of ['soffice', 'libreoffice']) {
-    if (commandWorks(command)) {
-      recalculateWithLibreOffice(workbookPath, command);
-      return `${command} headless`;
-    }
-  }
-  throw new Error(
-    'No spreadsheet calculation engine found. Gate stopped rather than reading cached formula results.'
-  );
 }
 
 async function dashboardExpected(asOf) {
@@ -342,7 +297,7 @@ async function main() {
     fs.writeFileSync(workbookPath, buffer);
   }
 
-  const engine = recalculate(workbookPath);
+  const engine = recalculateWorkbookFile(workbookPath);
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(workbookPath);
   const pro = workbook.getWorksheet('pro');
@@ -641,6 +596,12 @@ async function main() {
   }
   const refs = refErrors(workbook);
   if (refs.length) failures.push(`REF errors: ${refs.join(', ')}`);
+  const formulaErrors = scanFormulaErrors(workbook);
+  if (formulaErrors.length) {
+    failures.push(
+      `formula errors: ${formulaErrors.map(({ sheet, address, error }) => `${sheet}!${address}=${error}`).join(', ')}`
+    );
+  }
   const recalculatedViewState = workbookViewState(workbook);
   if (generatedViewState
       && (generatedViewState.activeSheet !== 'pro'
@@ -681,6 +642,7 @@ async function main() {
     formulaCounts: calculatedFormulaCounts,
     masterFormulaCounts,
     refErrors: refs,
+    formulaErrors,
     generatedViewState,
     generatedTabSelectedSheets,
     recalculatedViewState,
