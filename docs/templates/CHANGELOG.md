@@ -39,6 +39,43 @@ No rows were inserted or deleted. No other `pro` formulas were changed.
 
 No rows were inserted or deleted.
 
+## 2026-11-01 — Escrow office capacity expansion
+
+- Expanded the `Escrow` tab so officer-by-file-office routing has permanent
+  headroom:
+  - Glendale: reserved existing rows `22/23:24` as `Other`; four existing
+    dynamic slots remain at `27/28:29`, `30/31:32`, `33/34:35`, and
+    `38/39:40`.
+  - Orange: reserved existing rows `51/52:53` as `Other`; inserted three
+    dynamic slots at `63/64:65`, `66/67:68`, and `69/70:71`.
+  - Porterville: inserted three dynamic slots at `78/79:80`, `81/82:83`,
+    and `84/85:86`, plus reserved `Other` at `87/88:89`.
+  - Inland Empire: inserted three dynamic slots at `95/96:97`,
+    `98/99:100`, and `101/102:103`; its existing `Other` slot moved from
+    `74/75:76` to `104/105:106`.
+- Moved office/company totals: Orange `63 → 72`, Porterville `69 → 90`,
+  Inland Empire `77 → 107`, duplicate IE total `78 → 108`, and Total Escrow
+  `79 → 109`. Notes moved `82 → 112`; the macro marker moved `85 → 115`.
+- Expanded every visible office subtotal formula in columns
+  `D,E,F,H,I,J,L,M,N` to include every fixed, dynamic, and `Other` detail
+  pair. Glendale row 48 now includes its previously uncovered blank slots.
+  Total Escrow row 109 now sums rows `48,72,90,107`.
+- Row-translated every hidden legacy formula on the moved totals without
+  changing formula counts. Formula counts remain `pro=462`, `Escrow=306`,
+  and `r14=882`.
+- Updated all affected `pro` links: Orange row 30 now points to Escrow row
+  72; Porterville row 41 points to row 90; Inland Empire row 44 points to
+  row 107. Glendale row 17 remains linked to row 48.
+- Semantic repair, not a row translation: changed `pro!K44` from
+  `SUM(Escrow!H73:H73)` to `Escrow!H107` and `pro!L44` from
+  `SUM(Escrow!I72:I73)` to `Escrow!I107`. IE closing counts now include all
+  officer slots and `Other`, rather than only Karla Casco's old rows.
+- Expanded the print area from `B1:O80` to `B1:O110` and moved the two
+  far-right legacy merges from row 88 to row 118.
+
+Thirty rows were inserted on `Escrow`. No rows on `pro` or `r14` were
+inserted or deleted.
+
 ## 2026-11-01 — Zero-elapsed projection guards
 
 - Wrapped every `pro` formula that directly references elapsed/total working-day

@@ -347,13 +347,16 @@ app.get('/api/reports/reconciliation', async (req, res) => {
 app.get('/api/reports/daily-excel', async (req, res) => {
   try {
     const asOf = req.query.date || pacificDateString();
-    const buffer = await buildVerifiedDailyExcel(asOf);
+    const buffer = await buildVerifiedDailyExcel(asOf, {
+      branchMode: req.query.branch_mode,
+    });
     res.setHeader('Content-Type', EXCEL_MIME);
     res.setHeader(
       'Content-Disposition',
       `attachment; filename="PCT_Daily_Report_${asOf}.xlsx"`
     );
     const metadata = buffer.dailyExcelMetadata || {};
+    res.setHeader('X-PCT-Daily-Excel-Branch-Mode', metadata.branchMode || 'rep_home');
     res.setHeader(
       'X-PCT-Daily-Excel-Unmatched-Reps',
       encodeURIComponent(JSON.stringify(metadata.unmatchedReps || []))
@@ -375,7 +378,9 @@ app.get('/api/reports/daily-excel', async (req, res) => {
 
 app.post('/api/reports/daily-excel/test', async (req, res) => {
   try {
-    const result = await sendDailyExcelTest();
+    const result = await sendDailyExcelTest(undefined, {
+      branchMode: req.query.branch_mode,
+    });
     res.json(result);
   } catch (err) {
     console.error('Daily Excel test-send error:', err);
