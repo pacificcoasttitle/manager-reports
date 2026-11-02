@@ -1,0 +1,16 @@
+{
+  "name": "pct-excel-recalc",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Stateless LibreOffice recalculation service for PCT Excel reports",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": "24.x"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}

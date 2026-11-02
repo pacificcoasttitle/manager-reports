@@ -7,18 +7,19 @@ RUN apt-get update \
       fontconfig \
       fonts-dejavu-core \
       libreoffice-calc \
+      unzip \
     && rm -rf /var/lib/apt/lists/* \
     && soffice --headless --version
 
 WORKDIR /app
 
-COPY package.json package-lock.json ./
+COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
-COPY --chown=node:node . .
+COPY --chown=node:node server.js ./
 
 USER node
 
-EXPOSE 3001
+EXPOSE 8080
 
 CMD ["node", "server.js"]
