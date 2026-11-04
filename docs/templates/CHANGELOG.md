@@ -39,6 +39,68 @@ No rows were inserted or deleted. No other `pro` formulas were changed.
 
 No rows were inserted or deleted.
 
+## 2026-11-04 — Full slot formula audit and repair
+
+Audited every active and reserve data slot plus every subtotal/total row on
+`pro`, `r14`, and `Escrow`. Seventy formulas were missing, malformed, or
+semantically incomplete and were repaired:
+
+- `r14` slot formulas:
+  - `Y10`, `Y21`: blank → `SUM(Vn:Xn)`.
+  - `M23`: `SUM(J23:K23)` → `SUM(J23:L23)`.
+  - `M32`: blank → `SUM(J32:L32)`.
+  - `H74`: `SUM(F74:G74)` → `SUM(E74:G74)`.
+  - `N93`: blank → `IF($P$1=0,0,+M93/$P$1*$R$1)`.
+  - `M100`: blank → `SUM(J100:L100)`.
+  - `AE61` and `AE67:AE81`: `SUM(ABn:ACn)` →
+    `SUM(ABn:ADn)`, restoring each slot's TSG revenue component.
+- `r14` subtotal formulas:
+  - `J46`: `SUM(J10:J45)` → `SUM(J9:J45)`.
+  - `AB46`, `AC46`: `SUM(col8:col45)` → `SUM(col9:col45)`.
+  - `F84`: `SUM(F49:F83)-F53` → `SUM(F49:F83)-F51`.
+  - `G84`: `SUM(G49:G83)-G53` →
+    `SUM(G49:G83)-G53-G64`.
+  - `L84`: `SUM(L49:L83)-L53` →
+    `SUM(L49:L83)-L53-L64`.
+  - `M84`: `SUM(M47:M83)` → `SUM(M49:M83)`.
+  - `S84`: `SUM(S49:S83)` →
+    `SUM(S49:S83)-S53-S64`.
+  - `T84`: `SUM(T49:U83)` → `SUM(T49:T83)`.
+  - `X84`: `SUM(X49:X83)-X53` →
+    `SUM(X49:X83)-X53-X64`.
+  - `AD84`: `SUM(AD49:AD83)-AD53` →
+    `SUM(AD49:AD83)-AD53-AD64`.
+  - `AJ84`: `SUM(AJ49:AJ83)-AJ53` →
+    `SUM(AJ49:AJ83)-AJ53-AJ64`.
+- `Escrow` formulas:
+  - `F14`, `J14`: hardcoded `0` → `SUM(F8:F13)` and
+    `SUM(J8:J13)`.
+  - `D25`, `E25`, `F25`, `H25`, `I25`, `J25`, `L25`, `M25`, `N25`:
+    `SUM(col20:col24)` → `SUM(col20:col21,col23:col24)`, excluding
+    the row-22 officer heading from the officer subtotal.
+  - `M42`, `N42`: removed orphan Joseph Gomez subtotal formulas from the
+    blank spacer row; row 25 remains the canonical Joseph subtotal.
+- `pro` formulas:
+  - `W22`: `IF(M16=0,0,(+R16/M16))` →
+    `IF(L22=0,0,+R22/L22)`.
+  - `M26`: `IF($O$1=0,0,J25+L26/$O$1)` →
+    `IF($O$1=0,0,+L26/$O$1)`.
+  - `W37`, `W44`: blank → `IF(Ln=0,0,+Rn/Ln)`. `W44` is the
+    Inland Empire Escrow Fee/File cell; on the 2026-10-29 proof build this
+    visibly changes from blank to `$3,952.86` per close. Revenue, counts,
+    branch/company totals, and Math checks are unchanged.
+  - `N41`, `N44`: `+Mn*Q1` →
+    `IF($O$1=0,0,+Mn*$Q$1)`.
+  - `K27`, `K36`: blank/hardcoded `0` → `'r14'!$R$102` and
+    `'r14'!$R$106`.
+  - `Z20/AA20`, `Z33/AA33`, `Z39/AA39`, `Z41/AA41`,
+    `Z51/AA51`, `Z53/AA53`, and `Z57/AA57`: wrapped the existing
+    `Hn/Yn` or `Nn/Yn` expression in `IF(Yn=0,0,<original>)`.
+
+No rows were inserted or deleted. The audit is repeatable with
+`node scripts/audit-daily-excel-template.js`; a clean template reports zero
+findings.
+
 ## 2026-11-01 — Escrow office capacity expansion
 
 - Expanded the `Escrow` tab so officer-by-file-office routing has permanent

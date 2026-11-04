@@ -11,6 +11,7 @@ const { buildDailyReportHtml, sendDailyReport } = require('./lib/daily-email');
 const {
   buildVerifiedDailyExcel,
   sendDailyExcel,
+  dryRunDailyExcel,
   sendDailyExcelTest,
   pacificDateString,
   EXCEL_MIME,
@@ -2029,6 +2030,49 @@ cron.schedule('* * * * *', async () => {
 });
 
 console.log('Nightly import cron scheduled (checks every minute, runs at configured time)');
+
+// ============================================
+// DAILY EXCEL DRY RUN: 6:00 AM Pacific, Monday–Friday
+// ============================================
+// Build and run the complete recalculation gate one hour before delivery.
+// Success is silent; failure alerts Jerry and sends no report recipients.
+cron.schedule('0 6 * * 1-5', async () => {
+  const asOf = pacificDateString();
+  try {
+    const { rows } = await pool.query(
+      "SELECT value FROM app_settings WHERE key = 'daily_excel_enabled'"
+    );
+    if (rows[0]?.value !== 'true') {
+      console.log(JSON.stringify({
+        event: 'daily_excel_dry_run_disabled',
+        level: 'info',
+        date: asOf,
+        message: 'daily excel disabled — skipping dry run',
+      }));
+      return;
+    }
+
+    const result = await dryRunDailyExcel(asOf);
+    console.log(JSON.stringify({
+      event: 'daily_excel_dry_run_passed',
+      level: 'info',
+      date: asOf,
+      bytes: result.bytes,
+      r14RejectedSlots: result.metadata?.r14RejectedSlots || [],
+    }));
+  } catch (err) {
+    console.error(JSON.stringify({
+      event: 'daily_excel_dry_run_failed',
+      level: 'error',
+      date: asOf,
+      error: err.message,
+    }));
+  }
+}, {
+  timezone: 'America/Los_Angeles'
+});
+
+console.log('Daily Excel dry-run cron scheduled (6:00 AM Pacific, weekdays, flag-gated)');
 
 // ============================================
 // DAILY EXCEL CRON: 7:00 AM Pacific, Monday–Friday
