@@ -391,7 +391,11 @@ app.post('/api/reports/daily-excel/test', async (req, res) => {
 app.post('/api/reports/daily-excel/send', async (req, res) => {
   const asOf = req.body.date || pacificDateString();
   try {
-    res.json(await sendDailyExcel(asOf));
+    res.json(await sendDailyExcel(asOf, {
+      overrideMathChecks: req.body.override_math_checks === true,
+      overrideToken: req.body.override_token,
+      reviewedBy: req.body.reviewed_by,
+    }));
   } catch (err) {
     console.error('Daily Excel production-send error:', err);
     res.status(500).json({
